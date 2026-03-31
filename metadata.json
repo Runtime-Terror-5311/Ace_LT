@@ -1,0 +1,7 @@
+{
+  "name": "AceLawn - Tennis Team Management",
+  "description": "A comprehensive, sports-themed dashboard for lawn tennis teams featuring match management with pro-scoring, player analytics, attendance tracking, financial contributions, and equipment inventory.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
