@@ -2,7 +2,8 @@ import { Announcement } from '../models/Models';
 
 export const getAnnouncements = async (req: any, res: any) => {
   try {
-    const announcements = await Announcement.find().sort({ createdAt: -1 });
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const announcements = await Announcement.find({ createdAt: { $gte: fortyEightHoursAgo } }).sort({ createdAt: -1 });
     res.json(announcements);
   } catch (err) {
     res.status(500).json({ message: 'Error fetching announcements' });

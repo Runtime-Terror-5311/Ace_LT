@@ -83,3 +83,16 @@ const equipmentRequestSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const EquipmentRequest = mongoose.model('EquipmentRequest', equipmentRequestSchema);
+
+const calendarEventSchema = new mongoose.Schema({
+  event: { type: String, required: true },
+  dateString: { type: String, required: true },
+  time: { type: String, required: true },
+  court: { type: String, required: true },
+  dayOfMonth: { type: Number, required: true },
+  month: { type: Number, required: true },
+  year: { type: Number, required: true }
+}, { timestamps: true });
+
+export const CalendarEvent = mongoose.model('CalendarEvent', calendarEventSchema);
+
