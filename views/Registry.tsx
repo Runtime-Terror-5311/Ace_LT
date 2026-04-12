@@ -28,7 +28,8 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
     regNo: '',
     email: '',
     year: '1',
-    imageUrl: ''
+    imageUrl: '',
+    gender: ''
   });
 
   // Capacity Logic
@@ -41,30 +42,61 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
   const isViceCaptain = user.role === UserRole.VICE_CAPTAIN;
   const isLeadership = isAdmin || isCaptain || isViceCaptain;
 
-  const handleInduct = (e: React.FormEvent) => {
+  const handleInduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (currentYearIntake >= MAX_SLOTS) {
       alert("Annual induction limit (40 slots) has been reached.");
       return;
     }
 
-    const newMember: User = {
-      id: `u${Date.now()}`,
-      name: newInductee.name,
-      email: newInductee.email,
-      regNo: newInductee.regNo,
-      role: UserRole.MEMBER,
-      gender: user.gender, 
-      isInducted: true,
-      currentYear: parseInt(newInductee.year),
-      year: parseInt(newInductee.year),
-      joinedAt: new Date().toISOString().split('T')[0],
-      avatar: newInductee.imageUrl || undefined
-    };
+    try {
+      const token = localStorage.getItem('ace_token');
+      const res = await fetch('/api/users/register', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: newInductee.name,
+          email: newInductee.email,
+          regNo: newInductee.regNo,
+          phone: newInductee.regNo, // default password = regNo
+          gender: newInductee.gender,
+          currentYear: parseInt(newInductee.year),
+          designation: 'Member',
+          role: 'member'
+        })
+      });
 
-    setMembers([newMember, ...members]);
-    setNewInductee({ name: '', regNo: '', email: '', year: '1', imageUrl: '' });
-    alert(`${newMember.name} has been inducted successfully into the ${user.gender} category.`);
+      const data = await res.json();
+
+      if (res.ok) {
+        // Also update local state for immediate UI update
+        const newMember: User = {
+          id: data.user?._id || `u${Date.now()}`,
+          name: newInductee.name,
+          email: newInductee.email,
+          regNo: newInductee.regNo,
+          role: UserRole.MEMBER,
+          gender: newInductee.gender, 
+          isInducted: true,
+          currentYear: parseInt(newInductee.year),
+          year: parseInt(newInductee.year),
+          joinedAt: new Date().toISOString().split('T')[0],
+          avatar: newInductee.imageUrl || undefined
+        };
+
+        setMembers([newMember, ...members]);
+        setNewInductee({ name: '', regNo: '', email: '', year: '1', imageUrl: '', gender: '' });
+        alert(`${newMember.name} has been inducted successfully into the ${newInductee.gender} category. They can now login with their email and regNo (password = regNo).`);
+      } else {
+        alert(`Induction failed: ${data.message}`);
+      }
+    } catch (err) {
+      console.error('Induction error:', err);
+      alert('Network error during induction. Please try again.');
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -203,7 +235,7 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 tracking-tight">Member Induction</h3>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enroll new members into the {user.gender} team</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enroll new members into the team</p>
                   </div>
                 </div>
                 <button 
@@ -214,7 +246,7 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
                 </button>
               </div>
 
-              <form onSubmit={handleInduct} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+              <form onSubmit={handleInduct} className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Full Name</label>
                   <input 
@@ -259,6 +291,16 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
                    </div>
                 </div>
                 <div className="flex gap-2">
+                    <select 
+                      required
+                      className={`flex-1 bg-slate-50 border rounded-xl py-3 px-4 text-xs font-bold outline-none cursor-pointer ${newInductee.gender ? 'border-slate-100' : 'border-red-200 bg-red-50/30'}`}
+                      value={newInductee.gender}
+                      onChange={(e) => setNewInductee({...newInductee, gender: e.target.value})}
+                    >
+                      <option value="" disabled>Gender</option>
+                      <option value="Boys">Boys</option>
+                      <option value="Girls">Girls</option>
+                    </select>
                     <select 
                       className="flex-1 bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 text-xs font-bold outline-none cursor-pointer"
                       value={newInductee.year}

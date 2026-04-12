@@ -7,8 +7,9 @@ import DashboardLayout from '@components/DashboardLayout';
 import DashboardOverview from '@views/DashboardOverview';
 import MatchManager from '@views/MatchManager';
 import PlayerStatsView from '@views/PlayerStats';
-import Financials from '@views/Financials';
-import Inventory from '@views/Inventory';
+// import Financials from '@views/Financials';
+// import Inventory from '@views/Inventory';
+import AdminPanel from '@views/AdminPanel';
 import Attendance from '@views/Attendance';
 import AnnouncementsView from '@views/Announcements';
 import Settings from '@views/Settings';
@@ -18,16 +19,22 @@ import AlumniManager from '@views/AlumniManager';
 import { User, UserRole, EquipmentRequest, InventoryItem, Achievement, Alumni } from './types';
 import { MOCK_USERS, MOCK_INVENTORY, MOCK_ACHIEVEMENTS, MOCK_ALUMNI } from './mockData';
 
-const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('ace_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+const parseLocalStorage = <T,>(key: string, fallback: T): T => {
+  try {
+    const saved = localStorage.getItem(key);
+    if (!saved) return fallback;
+    return JSON.parse(saved) as T;
+  } catch (err) {
+    console.warn(`Invalid localStorage item '${key}', clearing it.`, err);
+    localStorage.removeItem(key);
+    return fallback;
+  }
+};
 
-  const [members, setMembers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('ace_members');
-    return saved ? JSON.parse(saved) : MOCK_USERS;
-  });
+const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(() => parseLocalStorage<User | null>('ace_user', null));
+
+  const [members, setMembers] = useState<User[]>(() => parseLocalStorage<User[]>('ace_members', MOCK_USERS));
 
   const [inventory, setInventory] = useState<InventoryItem[]>(MOCK_INVENTORY);
   const [requests, setRequests] = useState<EquipmentRequest[]>([]);
@@ -47,9 +54,24 @@ const App: React.FC = () => {
           fetch('/api/requests', { headers })
         ]);
 
+        const authFailed = [usersRes, inventoryRes, requestsRes].some(res => res.status === 401 || res.status === 403);
+        if (authFailed) {
+          console.warn('Authorization failed, clearing session and redirecting to login.');
+          setUser(null);
+          localStorage.removeItem('ace_user');
+          localStorage.removeItem('ace_token');
+          return;
+        }
+
         if (usersRes.ok) {
           const usersData = await usersRes.json();
           setMembers(usersData);
+          
+          const currentUserData = usersData.find((u: User) => (u._id && u._id === user._id) || (u.id && u.id === user.id));
+          if (currentUserData) {
+            setUser(currentUserData);
+            localStorage.setItem('ace_user', JSON.stringify(currentUserData));
+          }
         }
         if (inventoryRes.ok) {
           const inventoryData = await inventoryRes.json();
@@ -67,15 +89,9 @@ const App: React.FC = () => {
     fetchData();
   }, [user]);
 
-  const [achievements, setAchievements] = useState<Achievement[]>(() => {
-    const saved = localStorage.getItem('ace_achievements');
-    return saved ? JSON.parse(saved) : MOCK_ACHIEVEMENTS;
-  });
+  const [achievements, setAchievements] = useState<Achievement[]>(() => parseLocalStorage<Achievement[]>('ace_achievements', MOCK_ACHIEVEMENTS));
 
-  const [alumni, setAlumni] = useState<Alumni[]>(() => {
-    const saved = localStorage.getItem('ace_alumni');
-    return saved ? JSON.parse(saved) : MOCK_ALUMNI;
-  });
+  const [alumni, setAlumni] = useState<Alumni[]>(() => parseLocalStorage<Alumni[]>('ace_alumni', MOCK_ALUMNI));
 
   useEffect(() => {
     localStorage.setItem('ace_achievements', JSON.stringify(achievements));
@@ -89,25 +105,39 @@ const App: React.FC = () => {
     localStorage.setItem('ace_members', JSON.stringify(members));
   }, [members]);
 
-  const handleLogin = async (email: string, password: string, regNo?: string) => {
+  const handleLogin = async (email: string, password: string, regNo: string, otp?: string) => {
     try {
-      const response = await fetch('/api/auth/login', {
+      let endpoint = '/api/auth/login';
+      let body = { email, password, regNo };
+
+      if (otp) {
+        endpoint = '/api/auth/verify-otp';
+        body = { email, otp };
+      }
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, regNo }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || 'Login failed');
+        throw new Error(data.message || 'Authentication failed');
       }
 
+      if (!otp) {
+        // OTP sent successfully, don't set user yet
+        return;
+      }
+
+      // OTP verified, login successful
       const { token, user: loggedInUser } = await response.json();
       setUser(loggedInUser);
       localStorage.setItem('ace_user', JSON.stringify(loggedInUser));
       localStorage.setItem('ace_token', token);
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('Authentication error:', err);
       throw err;
     }
   };
@@ -123,6 +153,9 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('ace_user');
+    localStorage.removeItem('ace_token');
+    window.location.href = '/#/login';
+    window.location.reload();
   };
 
   const pendingCount = requests.filter(r => r.status === 'pending').length;
@@ -143,10 +176,10 @@ const App: React.FC = () => {
               <DashboardLayout user={user} onLogout={handleLogout} pendingCount={pendingCount}>
                 <Routes>
                   <Route index element={<DashboardOverview user={user} />} />
-                  <Route path="matches" element={<MatchManager user={user} />} />
+                  <Route path="matches" element={<MatchManager user={user} members={members} />} />
                   <Route path="stats" element={<PlayerStatsView user={user} members={members} />} />
-                  <Route path="financials" element={<Financials user={user} />} />
-                  <Route 
+                  {/* <Route path="financials" element={<Financials user={user} members={members} />} /> */}
+                  {/* <Route 
                     path="inventory" 
                     element={
                       <Inventory 
@@ -157,8 +190,18 @@ const App: React.FC = () => {
                         setInventory={setInventory}
                       />
                     } 
+                  /> */}
+                  <Route 
+                    path="admin" 
+                    element={
+                      user.role === 'admin' ? (
+                        <AdminPanel user={user} onUserUpdate={handleUserUpdate} />
+                      ) : (
+                        <Navigate to="/dashboard" />
+                      )
+                    } 
                   />
-                  <Route path="attendance" element={<Attendance user={user} />} />
+                  <Route path="attendance" element={<Attendance user={user} members={members} />} />
                   <Route path="announcements" element={<AnnouncementsView user={user} />} />
                   <Route 
                     path="registry" 
@@ -188,7 +231,7 @@ const App: React.FC = () => {
                 </Routes>
               </DashboardLayout>
             ) : (
-              <Navigate to="/login" />
+              <Navigate to="/login" replace />
             )
           } 
         />

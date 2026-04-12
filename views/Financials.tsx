@@ -2,11 +2,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { IndianRupee, Download, TrendingUp, AlertTriangle, QrCode, CreditCard, Send, CheckCircle2, Clock, Mail, ShieldCheck, ExternalLink, Image as ImageIcon, Plus, Minus, History, Users, School, Building2, UserCircle2, ArrowUpRight, ArrowDownRight, MessageSquareText, ListFilter, UserCheck, UserX } from 'lucide-react';
 import { User, UserRole, Contribution, FinancialLog } from '@/types';
-import { MOCK_USERS } from '@/mockData';
 
 const CONTRIBUTION_AMOUNT = 100;
 
-const Financials: React.FC<{ user: User }> = ({ user }) => {
+const Financials: React.FC<{ user: User; members: User[] }> = ({ user, members }) => {
   const [payments, setPayments] = useState<Record<string, Contribution>>(() => {
     const saved = localStorage.getItem('ace_payments');
     return saved ? JSON.parse(saved) : {};
@@ -51,7 +50,7 @@ const Financials: React.FC<{ user: User }> = ({ user }) => {
 
   const stats = useMemo(() => {
     const memberPaidCount = (Object.values(payments) as Contribution[]).filter(p => p.paid && p.month === currentMonth).length;
-    const unpaidCount = MOCK_USERS.length - memberPaidCount;
+    const unpaidCount = members.length - memberPaidCount;
     const memberCollected = memberPaidCount * CONTRIBUTION_AMOUNT;
     
     // External Fund Summation
@@ -64,12 +63,12 @@ const Financials: React.FC<{ user: User }> = ({ user }) => {
     
     return {
       totalFund: totalBalance,
-      paidRatio: Math.round((memberPaidCount / MOCK_USERS.length) * 100) || 0,
+      paidRatio: Math.round((memberPaidCount / members.length) * 100) || 0,
       defaulters: unpaidCount,
       alumniFund: alumniTotal,
       collegeFund: collegeTotal,
-      paidMembers: MOCK_USERS.filter(m => payments[m.id]?.paid && payments[m.id]?.month === currentMonth),
-      dueMembers: MOCK_USERS.filter(m => !payments[m.id]?.paid || payments[m.id]?.month !== currentMonth)
+      paidMembers: members.filter(m => payments[m.id]?.paid && payments[m.id]?.month === currentMonth),
+      dueMembers: members.filter(m => !payments[m.id]?.paid || payments[m.id]?.month !== currentMonth)
     };
   }, [payments, externalLogs, currentMonth]);
 

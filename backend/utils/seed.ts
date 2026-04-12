@@ -16,6 +16,7 @@ export const seedDatabase = async () => {
       { regNo: '2023UGEC026', phone: '9648345216', designation: 'Member', gender: 'Boys' },
       { regNo: '2024UGCS018', phone: '8353925382', designation: 'Vice Captain', gender: 'Boys' },
       { regNo: '2025UGEE090', phone: '7063537252', designation: 'Member', gender: 'Boys' },
+      { regNo: '2024UGCS102', phone: '9205120803', designation: 'Admin', gender: 'Boys', email: 'adityaprakash91111@gmail.com' },
     ];
 
     for (const d of freshData) {
@@ -27,10 +28,11 @@ export const seedDatabase = async () => {
 
       let role = 'member';
       const des = d.designation.trim().toLowerCase();
-      if (des === 'captain') role = 'captain';
+      if (des === 'admin') role = 'admin';
+      else if (des === 'captain') role = 'captain';
       else if (des === 'vice captain') role = 'viceCaptain';
 
-      const email = `${d.regNo.toLowerCase()}@nitjsr.ac.in`;
+      const email = (d as any).email || `${d.regNo.toLowerCase()}@nitjsr.ac.in`;
 
       await InductedMember.create({
         email: email,

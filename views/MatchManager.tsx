@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { Swords, Trophy, History, Coins, RotateCcw, Save, Zap, Activity, Calendar, Clock, Play, User as UserIcon, Settings2, Search, CheckCircle, RefreshCcw, FileDown, MapPin, UserCheck, LayoutList, Undo2 } from 'lucide-react';
-import { User, MatchType, Match, GameScore } from '@/types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Swords, Trophy, History, Coins, RotateCcw, Zap, Activity, Calendar, Play, Settings2, Search, CheckCircle, FileDown, LayoutList, Undo2 } from 'lucide-react';
+import { User, UserRole, MatchType, Match, GameScore } from '@/types';
 
-const TENNIS_POINTS = ["0", "15", "30", "40", "AD"];
+const TENNIS_POINTS = ['0', '15', '30', '40', 'AD'];
 
 interface MatchState {
   score: { p1: number; p2: number; games1: number; games2: number; sets1: number; sets2: number };
@@ -12,26 +12,56 @@ interface MatchState {
   isMatchOver: boolean;
 }
 
-const MatchManager: React.FC<{ user: User }> = ({ user }) => {
+const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members }) => {
   const [activeTab, setActiveTab] = useState<'create' | 'history' | 'umpire-sheet'>('create');
   const [isMatchStarted, setIsMatchStarted] = useState(false);
   const [isMatchOver, setIsMatchOver] = useState(false);
-  const [selectedMatchForSheet, setSelectedMatchForSheet] = useState<any>(null);
-  
-  const [matchHistory, setMatchHistory] = useState<any[]>([
-    { id: 'h1', p1Name: 'Roger Federer', p2Name: 'Mike Ross', players: 'Roger vs Mike', score: '6-4, 7-5', score1: 2, score2: 0, winner: 'Roger Federer', type: 'Urja', date: '12 May', court: 'Court 1', gameHistory: [{gameNumber: 1, serverInitials: 'Roger Federer', score: '40-15'}, {gameNumber: 2, serverInitials: 'Mike Ross', score: '30-40'}] },
-    { id: 'h2', p1Name: 'Jane Smith', p2Name: 'Alice Wong', players: 'Jane vs Alice', score: '6-2, 6-1', score1: 2, score2: 0, winner: 'Jane Smith', type: 'Inter NIT', date: '10 May', court: 'Court 2', gameHistory: [] },
-  ]);
+  const [selectedMatchForSheet, setSelectedMatchForSheet] = useState<Match | null>(null);
+
+  const [matchHistory, setMatchHistory] = useState<Match[]>(() => {
+    const saved = localStorage.getItem('ace_match_history');
+    if (!saved) {
+      return [];
+    }
+
+    try {
+      return JSON.parse(saved) as Match[];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ace_match_history', JSON.stringify(matchHistory));
+  }, [matchHistory]);
+
+  const eligiblePlayers = useMemo(
+    () => members.filter((member) => member.isInducted && member.role !== UserRole.ADMIN),
+    [members]
+  );
 
   const [config, setConfig] = useState({
-    p1Name: 'Player Alpha',
-    p2Name: 'Player Beta',
+    p1Name: eligiblePlayers[0]?.name || '',
+    p2Name: eligiblePlayers[1]?.name || eligiblePlayers[0]?.name || '',
     type: MatchType.RANDOM,
     gamesToWin: 5,
     setsToWin: 1,
-    date: '2026-02-13',
-    court: 'Main Court'
+    date: new Date().toISOString().slice(0, 10),
+    court: 'Main Court',
   });
+
+  useEffect(() => {
+    if (eligiblePlayers.length === 0) return;
+    setConfig((prev) => {
+      const defaultP1 = prev.p1Name && eligiblePlayers.some((m) => m.name === prev.p1Name) ? prev.p1Name : eligiblePlayers[0].name;
+      const defaultP2 = prev.p2Name && eligiblePlayers.some((m) => m.name === prev.p2Name) ? prev.p2Name : eligiblePlayers.find((m) => m.name !== defaultP1)?.name || '';
+      return {
+        ...prev,
+        p1Name: defaultP1,
+        p2Name: defaultP1 === defaultP2 ? eligiblePlayers.find((m) => m.name !== defaultP1)?.name || '' : defaultP2,
+      };
+    });
+  }, [eligiblePlayers]);
 
   const [score, setScore] = useState({ p1: 0, p2: 0, games1: 0, games2: 0, sets1: 0, sets2: 0 });
   const [setScores, setSetScores] = useState<string[]>([]);
@@ -43,11 +73,20 @@ const MatchManager: React.FC<{ user: User }> = ({ user }) => {
   const [showTossChoice, setShowTossChoice] = useState(false);
   const [currentServer, setCurrentServer] = useState<string>('');
 
+  const selectedPlayer1 = eligiblePlayers.find((member) => member.name === config.p1Name);
+  const selectedPlayer2 = eligiblePlayers.find((member) => member.name === config.p2Name);
+
+  const arePlayersSelected = Boolean(config.p1Name && config.p2Name && config.p1Name !== config.p2Name);
+  const canFlipToss = arePlayersSelected;
+  const canStartMatch = Boolean(tossResult?.choice && arePlayersSelected);
+
   const handleToss = () => {
+    if (!canFlipToss) return;
     setIsTossing(true);
     setTossResult(null);
+    setCurrentServer('');
     setTimeout(() => {
-      const winner = Math.random() > 0.5 ? config.p1Name : config.p2Name;
+      const winner = Math.random() < 0.5 ? config.p1Name : config.p2Name;
       setTossResult({ winner, choice: null });
       setIsTossing(false);
       setShowTossChoice(true);
@@ -58,7 +97,7 @@ const MatchManager: React.FC<{ user: User }> = ({ user }) => {
     if (!tossResult) return;
     setTossResult({ ...tossResult, choice });
     setShowTossChoice(false);
-    
+
     if (choice === 'serve') {
       setCurrentServer(tossResult.winner);
     } else {
@@ -68,7 +107,7 @@ const MatchManager: React.FC<{ user: User }> = ({ user }) => {
 
   const startMatch = () => {
     if (!tossResult || !tossResult.choice) {
-      alert("Please complete the toss and choice first.");
+      alert('Please complete the toss and choice first.');
       return;
     }
     setIsMatchStarted(true);
@@ -148,22 +187,24 @@ const MatchManager: React.FC<{ user: User }> = ({ user }) => {
   };
 
   const saveAndSyncStats = () => {
-    const winner = score.sets1 > score.sets2 ? config.p1Name : config.p2Name;
-    const finalScore = [...setScores].join(', ');
-    
-    const newHistoryItem = {
+    const winnerName = score.sets1 > score.sets2 ? config.p1Name : config.p2Name;
+    const winnerId = score.sets1 > score.sets2 ? selectedPlayer1?.id : selectedPlayer2?.id;
+    const newHistoryItem: Match = {
       id: `h${Date.now()}`,
-      players: `${config.p1Name} vs ${config.p2Name}`,
-      p1Name: config.p1Name,
-      p2Name: config.p2Name,
-      score: finalScore,
-      score1: score.sets1,
-      score2: score.sets2,
-      winner: winner,
+      player1Id: selectedPlayer1?.id || '',
+      player2Id: selectedPlayer2?.id || '',
+      player1Name: config.p1Name,
+      player2Name: config.p2Name,
+      score1: String(score.sets1),
+      score2: String(score.sets2),
+      winnerId: winnerId,
+      winner: winnerName,
       type: config.type,
       court: config.court,
       gameHistory: [...gameHistory],
-      date: new Date(config.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+      scheduledAt: config.date,
+      completed: true,
+      createdAt: new Date().toISOString(),
     };
 
     setMatchHistory(prev => [newHistoryItem, ...prev]);
@@ -253,56 +294,125 @@ const MatchManager: React.FC<{ user: User }> = ({ user }) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-12 gap-y-6">
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Player 1 (Service Side)</label>
-                    <input className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-6 text-slate-900 font-bold outline-none" value={config.p1Name} onChange={(e) => setConfig({...config, p1Name: e.target.value})} />
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Player 1</label>
+                    <select
+                      value={config.p1Name}
+                      onChange={(e) => {
+                        setConfig((prev) => {
+                          const updatedP1 = e.target.value;
+                          const updatedP2 = prev.p2Name === updatedP1
+                            ? eligiblePlayers.find((member) => member.name !== updatedP1)?.name || ''
+                            : prev.p2Name;
+                          return {
+                            ...prev,
+                            p1Name: updatedP1,
+                            p2Name: updatedP2,
+                          };
+                        });
+                      }}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-6 text-slate-900 font-bold outline-none cursor-pointer"
+                    >
+                      {eligiblePlayers
+                        .filter((member) => member.name !== config.p2Name)
+                        .map((member) => (
+                          <option key={`${member.id}-${member.name}`} value={member.name}>
+                            {member.name}
+                          </option>
+                        ))}
+                    </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Player 2 (Return Side)</label>
-                    <input className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-6 text-slate-900 font-bold outline-none" value={config.p2Name} onChange={(e) => setConfig({...config, p2Name: e.target.value})} />
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Player 2</label>
+                    <select
+                      value={config.p2Name}
+                      onChange={(e) => {
+                        setConfig((prev) => {
+                          const updatedP2 = e.target.value;
+                          const updatedP1 = prev.p1Name === updatedP2
+                            ? eligiblePlayers.find((member) => member.name !== updatedP2)?.name || ''
+                            : prev.p1Name;
+                          return {
+                            ...prev,
+                            p2Name: updatedP2,
+                            p1Name: updatedP1,
+                          };
+                        });
+                      }}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-6 text-slate-900 font-bold outline-none cursor-pointer"
+                    >
+                      {eligiblePlayers
+                        .filter((member) => member.name !== config.p1Name)
+                        .map((member) => (
+                          <option key={`${member.id}-${member.name}`} value={member.name}>
+                            {member.name}
+                          </option>
+                        ))}
+                    </select>
                   </div>
-                  
-                  <div className="bg-emerald-50/40 p-5 rounded-2xl border border-emerald-100">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-600 border border-emerald-50"><Coins size={20} /></div>
-                            <div>
-                                <p className="font-bold text-slate-900 text-xs">Coin Toss</p>
-                                <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">{tossResult ? `Winner: ${tossResult.winner}` : 'Flip to decide'}</p>
-                            </div>
-                        </div>
-                        {!tossResult && (
-                            <button onClick={handleToss} disabled={isTossing} className="bg-white text-emerald-600 border border-emerald-200 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50">
-                                {isTossing ? '...' : 'FLIP'}
-                            </button>
-                        )}
-                    </div>
-                    {showTossChoice && (
-                        <div className="space-y-3 animate-in fade-in">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Choose Option:</p>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button onClick={() => handleTossChoice('serve')} className="bg-emerald-600 text-white py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Serve</button>
-                                <button onClick={() => handleTossChoice('side')} className="bg-emerald-600 text-white py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Side</button>
-                            </div>
-                        </div>
-                    )}
-                    {tossResult?.choice && (
-                        <div className="flex items-center gap-2 text-emerald-700 font-black text-[10px] uppercase tracking-widest mt-2">
-                            <CheckCircle size={14} /> {tossResult.winner} chose {tossResult.choice.toUpperCase()}
-                        </div>
-                    )}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Match Date</label>
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-6 text-slate-900 font-bold outline-none"
+                      value={config.date}
+                      onChange={(e) => setConfig({ ...config, date: e.target.value })}
+                    />
                   </div>
                 </div>
 
                 <div className="space-y-6">
+                  <div className="bg-emerald-50/40 p-5 rounded-2xl border border-emerald-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-600 border border-emerald-50"><Coins size={20} /></div>
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">Coin Toss</p>
+                          <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">{tossResult ? `Winner: ${tossResult.winner}` : 'Flip to decide'}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                          onClick={handleToss}
+                          disabled={!canFlipToss || isTossing}
+                          className="bg-white text-emerald-600 border border-emerald-200 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {tossResult ? (isTossing ? '...' : 'Re-Toss') : (isTossing ? '...' : 'Flip')}
+                        </button>
+                        {tossResult?.winner && (
+                          <div className="px-6 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                            <span>Toss winner:</span> <span className="font-bold text-slate-900">{tossResult.winner}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {showTossChoice && tossResult && (
+                      <div className="space-y-3 animate-in fade-in">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Choose Option:</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button onClick={() => handleTossChoice('serve')} className="bg-emerald-600 text-white py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Serve</button>
+                          <button onClick={() => handleTossChoice('side')} className="bg-emerald-600 text-white py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest">Side</button>
+                        </div>
+                      </div>
+                    )}
+                    {tossResult?.choice && (
+                      <div className="flex items-center gap-2 text-emerald-700 font-black text-[10px] uppercase tracking-widest mt-2">
+                        <CheckCircle size={14} /> {tossResult.winner} chose {tossResult.choice.toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Fixture Category</label>
                     <select className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-6 text-slate-900 font-bold appearance-none cursor-pointer" value={config.type} onChange={(e) => setConfig({...config, type: e.target.value as MatchType})}>
                       {Object.values(MatchType).map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
+                </div>
+
+                <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Court Number / Name</label>
                     <input className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-6 text-slate-900 font-bold outline-none" value={config.court} onChange={(e) => setConfig({...config, court: e.target.value})} placeholder="e.g. Court 1" />
@@ -322,7 +432,7 @@ const MatchManager: React.FC<{ user: User }> = ({ user }) => {
 
               <button 
                 onClick={startMatch}
-                disabled={!tossResult?.choice}
+                disabled={!canStartMatch}
                 className="w-full mt-10 py-5 emerald-gradient text-white rounded-[1rem] font-black text-sm uppercase tracking-[0.2em] shadow-xl hover:opacity-95 disabled:opacity-50 disabled:grayscale transition-all flex items-center justify-center gap-3"
               >
                 <Play size={20} fill="currentColor" /> Initialize Scoreboard
@@ -432,11 +542,11 @@ const MatchManager: React.FC<{ user: User }> = ({ user }) => {
                      <td className="px-10 py-8">
                        <div className="flex items-center gap-4">
                           <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors"><Swords size={18} /></div>
-                          <span className="font-bold text-slate-800 tracking-tight">{m.players}</span>
+                          <span className="font-bold text-slate-800 tracking-tight">{m.player1Name} vs {m.player2Name}</span>
                        </div>
                      </td>
                      <td className="px-10 py-8">
-                       <span className="px-4 py-1.5 bg-white border border-slate-200 rounded-lg font-mono text-emerald-600 font-bold shadow-sm">{m.score}</span>
+                       <span className="px-4 py-1.5 bg-white border border-slate-200 rounded-lg font-mono text-emerald-600 font-bold shadow-sm">{(m as any).score ?? `${m.score1}-${m.score2}`}</span>
                      </td>
                      <td className="px-10 py-8">
                        <div className="flex items-center gap-2">
@@ -478,7 +588,7 @@ const MatchManager: React.FC<{ user: User }> = ({ user }) => {
                   </div>
                   <div className="space-y-1 text-center">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</p>
-                      <p className="font-bold text-slate-900">{selectedMatchForSheet.date}</p>
+                      <p className="font-bold text-slate-900">{selectedMatchForSheet.scheduledAt || (selectedMatchForSheet as any).date || 'N/A'}</p>
                   </div>
                   <div className="space-y-1 text-right">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Court</p>
@@ -489,21 +599,21 @@ const MatchManager: React.FC<{ user: User }> = ({ user }) => {
               <div className="grid grid-cols-2 border-y border-slate-200 py-6 mb-12">
                   <div className="border-r border-slate-100 px-8">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Player One</p>
-                      <p className="text-xl font-black text-slate-900">{selectedMatchForSheet.p1Name}</p>
+                      <p className="text-xl font-black text-slate-900">{selectedMatchForSheet.player1Name}</p>
                       <div className="mt-4 flex gap-2">
                           <span className="text-[10px] font-bold text-slate-400 uppercase">Sets Won:</span>
                           {[1,2,3,4,5,6,7,8].map(n => (
-                              <span key={n} className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black ${selectedMatchForSheet.score1 >= n ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-300'}`}>{n}</span>
+                              <span key={n} className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black ${Number(selectedMatchForSheet.score1) >= n ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-300'}`}>{n}</span>
                           ))}
                       </div>
                   </div>
                   <div className="px-8 text-right">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Player Two</p>
-                      <p className="text-xl font-black text-slate-900">{selectedMatchForSheet.p2Name}</p>
+                      <p className="text-xl font-black text-slate-900">{selectedMatchForSheet.player2Name}</p>
                       <div className="mt-4 flex gap-2 justify-end">
                           <span className="text-[10px] font-bold text-slate-400 uppercase">Sets Won:</span>
                           {[1,2,3,4,5,6,7,8].map(n => (
-                              <span key={n} className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black ${selectedMatchForSheet.score2 >= n ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-300'}`}>{n}</span>
+                              <span key={n} className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black ${Number(selectedMatchForSheet.score2) >= n ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-300'}`}>{n}</span>
                           ))}
                       </div>
                   </div>
