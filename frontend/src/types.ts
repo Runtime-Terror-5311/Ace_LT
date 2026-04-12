@@ -36,6 +36,7 @@ export interface Match {
   score1: string; 
   score2: string;
   winnerId?: string;
+  winner?: string;
   tossWinner?: string;
   tossChoice?: 'serve' | 'side';
   gameHistory: GameScore[];
@@ -56,6 +57,7 @@ export interface User {
   role: UserRole;
   gender: Gender | string;
   isInducted: boolean;
+  isPaid?: boolean;
   currentYear?: number; 
   year?: number;
   joinedAt: string; 

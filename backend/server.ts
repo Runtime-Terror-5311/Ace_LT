@@ -10,6 +10,7 @@ import matchRoutes from './routes/matchRoutes';
 import inventoryRoutes from './routes/inventoryRoutes';
 import userRoutes from './routes/userRoutes';
 import requestRoutes from './routes/requestRoutes';
+import announcementRoutes from './routes/announcementRoutes';
 
 dotenv.config();
 
@@ -41,6 +42,7 @@ async function startServer() {
   app.use('/api/inventory', inventoryRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/requests', requestRoutes);
+  app.use('/api/announcements', announcementRoutes);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {

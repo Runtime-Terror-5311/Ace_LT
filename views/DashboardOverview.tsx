@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Trophy, 
@@ -17,20 +17,11 @@ import {
   Clock,
   MapPin,
   Save,
-  Trash2
+  Trash2,
+  CheckCircle2
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { User, UserRole } from '@/types';
-
-const chartData = [
-  { name: 'Mon', wins: 4, losses: 2 },
-  { name: 'Tue', wins: 3, losses: 1 },
-  { name: 'Wed', wins: 2, losses: 0 },
-  { name: 'Thu', wins: 5, losses: 3 },
-  { name: 'Fri', wins: 8, losses: 1 },
-  { name: 'Sat', wins: 6, losses: 2 },
-  { name: 'Sun', wins: 4, losses: 1 },
-];
+import { User, UserRole, Match } from '@/types';
 
 const INITIAL_EVENTS = [
   { id: '1', date: 'Feb 15', time: '05:00 PM', event: 'Urja Quarter Finals', court: 'Court 1', dayOfMonth: 15 },
@@ -55,7 +46,100 @@ const DashboardOverview: React.FC<OverviewProps> = ({ user }) => {
     dayOfMonth: 14
   });
 
+  const [matchHistory, setMatchHistory] = useState<Match[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('ace_match_history');
+    if (!saved) return;
+
+    try {
+      setMatchHistory(JSON.parse(saved) as Match[]);
+    } catch {
+      setMatchHistory([]);
+    }
+  }, []);
+
+  const matchStats = useMemo(() => {
+    const completedMatches = matchHistory.filter((match) => match.completed);
+    const activePlayerNames = new Set<string>();
+    completedMatches.forEach((match) => {
+      activePlayerNames.add(match.player1Name);
+      activePlayerNames.add(match.player2Name);
+    });
+
+    const userMatches = completedMatches.filter(
+      (match) => match.player1Name === user.name || match.player2Name === user.name
+    );
+    const userWins = userMatches.filter((match) => match.winner === user.name).length;
+    const userLosses = userMatches.length - userWins;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - 6);
+
+    const weeklyData = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + i);
+      return {
+        name: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        wins: 0,
+        losses: 0,
+        time: date.getTime(),
+      };
+    });
+
+    userMatches.forEach((match) => {
+      const matchDate = new Date(match.scheduledAt || match.createdAt);
+      if (Number.isNaN(matchDate.getTime())) return;
+      matchDate.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((matchDate.getTime() - weekStart.getTime()) / 86400000);
+      if (diffDays >= 0 && diffDays < 7) {
+        if (match.winner === user.name) {
+          weeklyData[diffDays].wins += 1;
+        } else {
+          weeklyData[diffDays].losses += 1;
+        }
+      }
+    });
+
+    const lastMatchDate = userMatches
+      .map((match) => new Date(match.scheduledAt || match.createdAt))
+      .filter((date) => !Number.isNaN(date.getTime()))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+
+    const recentActivity = lastMatchDate
+      ? `${lastMatchDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+      : 'No matches yet';
+
+    return {
+      completedMatchesCount: completedMatches.length,
+      activePlayersCount: activePlayerNames.size,
+      userWins,
+      userLosses,
+      userPlayed: userMatches.length,
+      userWinRate: userMatches.length ? Math.round((userWins / userMatches.length) * 100) : 0,
+      weeklyData,
+      recentActivity,
+    };
+  }, [matchHistory, user.name]);
+
   const isAdminOrCaptain = user.role === UserRole.ADMIN || user.role === UserRole.CAPTAIN || user.role === UserRole.VICE_CAPTAIN;
+  const [attendanceStatus, setAttendanceStatus] = useState({ sessions: 0, present: 0, rate: 0 });
+
+  useEffect(() => {
+    const saved = localStorage.getItem('ace_attendance_records');
+    if (!saved) return;
+
+    const records = JSON.parse(saved) as Array<{ statuses: Record<string, boolean> }>;
+    const myRecords = records.filter((record) => record.statuses[user.id] !== undefined);
+    const present = myRecords.reduce((sum, record) => sum + (record.statuses[user.id] ? 1 : 0), 0);
+    setAttendanceStatus({
+      sessions: myRecords.length,
+      present,
+      rate: myRecords.length ? Math.round((present / myRecords.length) * 100) : 0,
+    });
+  }, [user.id]);
 
   const handleAddEvent = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,22 +196,88 @@ const DashboardOverview: React.FC<OverviewProps> = ({ user }) => {
       {/* Stats Board */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Wins', value: '42', icon: Trophy, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-          { label: 'Players', value: '28', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Win Rate', value: '68%', icon: Target, color: 'text-amber-600', bg: 'bg-amber-50' },
-          { label: 'Activity', value: 'High', icon: Activity, color: 'text-purple-600', bg: 'bg-purple-50' },
+          { label: 'Matches Played', value: String(matchStats.completedMatchesCount), icon: Trophy, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+          { label: 'Players Active', value: String(matchStats.activePlayersCount), icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Your Win Rate', value: `${matchStats.userWinRate}%`, icon: Target, color: 'text-amber-600', bg: 'bg-amber-50' },
+          { label: 'Last Match', value: matchStats.recentActivity, icon: Activity, color: 'text-purple-600', bg: 'bg-purple-50' },
         ].map((stat, i) => (
           <div key={i} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start mb-4">
               <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
                 <stat.icon size={20} />
               </div>
-              <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-full">+12%</span>
+              <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-full">{stat.label === 'Matches Played' ? `${matchStats.completedMatchesCount > 0 ? '+12%' : '—'}` : ''}</span>
             </div>
             <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
           </div>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400 font-black">Your attendance</p>
+              <p className="text-xl font-black text-slate-900">{attendanceStatus.rate}%</p>
+            </div>
+            <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-700">
+              <CheckCircle2 size={20} />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-50 rounded-2xl p-4 text-center">
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Sessions</p>
+              <p className="text-lg font-black text-slate-900">{attendanceStatus.sessions}</p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4 text-center">
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Present</p>
+              <p className="text-lg font-black text-slate-900">{attendanceStatus.present}</p>
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4 text-center">
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Rate</p>
+              <p className="text-lg font-black text-slate-900">{attendanceStatus.rate}%</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Payment Status Card */}
+        <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400 font-black">Fee Status</p>
+                {user.isPaid ? (
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase rounded-lg">Cleared</span>
+                ) : (
+                  <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-black uppercase rounded-lg">Pending</span>
+                )}
+              </div>
+              <p className="text-xl font-black text-slate-900 mb-2">₹100 Contribution</p>
+              {user.isPaid ? (
+                <p className="text-xs text-slate-500 font-bold">Thank you! Your payment has been received and verified by the admin.</p>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-500 font-medium">Please scan the QR code to pay your ₹100 contribution. Once paid, the admin will update your status.</p>
+                  <p className="text-[10px] text-amber-600 bg-amber-50 p-2 rounded border border-amber-100 font-bold">
+                    Note: Save the image uploaded in this chat as <code className="bg-amber-100 px-1 rounded">payment-qr.jpeg</code> in the <code className="bg-amber-100 px-1 rounded">frontend/public</code> folder.
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            {!user.isPaid ? (
+              <div className="w-32 h-32 bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden flex items-center justify-center p-2 shadow-inner shrink-0">
+                {/* Fallback to text if image is not there */}
+                <img src="/payment-qr.jpeg" alt="Payment QR" className="w-full h-full object-contain mix-blend-multiply" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.innerHTML = '<span class="text-[10px] font-bold text-slate-400 text-center">Place payment-qr.jpeg in public dir</span>'; }} />
+              </div>
+            ) : (
+              <div className="w-24 h-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center shrink-0">
+                <CheckCircle2 strokeWidth={3} size={48} />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -140,7 +290,7 @@ const DashboardOverview: React.FC<OverviewProps> = ({ user }) => {
           </div>
           <div className="h-[300px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-              <BarChart data={chartData}>
+              <BarChart data={matchStats.weeklyData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 700}} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 700}} />

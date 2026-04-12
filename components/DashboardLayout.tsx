@@ -17,7 +17,8 @@ import {
   Bell,
   Users,
   Trophy,
-  GraduationCap
+  GraduationCap,
+  ShieldPlus
 } from 'lucide-react';
 import { User, UserRole } from '@/types';
 
@@ -39,19 +40,20 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ user, onLogout, pendi
     { name: 'Matches', icon: Swords, path: '/dashboard/matches', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN, UserRole.MEMBER] },
     { name: 'Leaderboard', icon: BarChart3, path: '/dashboard/stats', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN, UserRole.MEMBER] },
     { name: 'Attendance', icon: ClipboardCheck, path: '/dashboard/attendance', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN] },
-    { name: 'Financials', icon: IndianRupee, path: '/dashboard/financials', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN] },
-    { 
-      name: 'Equipment', 
-      icon: Package, 
-      path: '/dashboard/inventory', 
-      roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN, UserRole.MEMBER],
-      showBadge: isAdminOrCaptain && pendingCount > 0
-    },
+    // { name: 'Financials', icon: IndianRupee, path: '/dashboard/financials', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN] },
+    // { 
+    //   name: 'Equipment', 
+    //   icon: Package, 
+    //   path: '/dashboard/inventory', 
+    //   roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN, UserRole.MEMBER],
+    //   showBadge: isAdminOrCaptain && pendingCount > 0
+    // },
     { name: 'Bulletins', icon: Megaphone, path: '/dashboard/announcements', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN, UserRole.MEMBER] },
     { name: 'Registry', icon: Users, path: '/dashboard/registry', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN] },
     { name: 'Achievements', icon: Trophy, path: '/dashboard/achievements', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN] },
     { name: 'Alumni', icon: GraduationCap, path: '/dashboard/alumni', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN] },
     { name: 'Profile', icon: Settings, path: '/dashboard/settings', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN, UserRole.MEMBER] },
+    { name: 'Admin Panel', icon: ShieldPlus, path: '/dashboard/admin', roles: [UserRole.ADMIN] },
   ];
 
   const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));
