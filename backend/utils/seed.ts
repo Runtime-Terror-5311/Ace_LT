@@ -16,7 +16,7 @@ export const seedDatabase = async () => {
       { regNo: '2023UGEC026', phone: '9648345216', designation: 'Member', gender: 'Boys' },
       { regNo: '2024UGCS018', phone: '8353925382', designation: 'Vice Captain', gender: 'Boys' },
       { regNo: '2025UGEE090', phone: '7063537252', designation: 'Member', gender: 'Boys' },
-      { regNo: '2024UGCS102', phone: '9205120803', designation: 'Admin', gender: 'Boys', email: 'adityaprakash91111@gmail.com' },
+      { regNo: '2024UGCS102', phone: '9205120803', designation: 'Admin', gender: 'Boys', email: '2024ugcs102@nitjsr.ac.in' },
     ];
 
     for (const d of freshData) {

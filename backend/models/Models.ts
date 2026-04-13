@@ -2,11 +2,16 @@ import mongoose from 'mongoose';
 
 const matchSchema = new mongoose.Schema({
   type: { type: String, required: true },
+  category: { type: String, enum: ['Singles', 'Doubles'], default: 'Singles' },
   court: { type: String },
   player1Id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  player2Id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   player1Name: { type: String, required: true },
+  player1bId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  player1bName: { type: String },
+  player2Id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   player2Name: { type: String, required: true },
+  player2bId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  player2bName: { type: String },
   score1: { type: String, default: '0' },
   score2: { type: String, default: '0' },
   winnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

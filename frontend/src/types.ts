@@ -18,6 +18,11 @@ export enum MatchType {
   RANDOM = 'Random Match'
 }
 
+export enum MatchCategory {
+  SINGLES = 'Singles',
+  DOUBLES = 'Doubles'
+}
+
 export interface GameScore {
   gameNumber: number;
   serverInitials: string;
@@ -28,11 +33,16 @@ export interface Match {
   id: string;
   _id?: string;
   type: MatchType;
+  category: MatchCategory;
   court?: string;
   player1Id: string;
-  player2Id: string;
   player1Name: string;
+  player1bId?: string;
+  player1bName?: string;
+  player2Id: string;
   player2Name: string;
+  player2bId?: string;
+  player2bName?: string;
   score1: string; 
   score2: string;
   winnerId?: string;
