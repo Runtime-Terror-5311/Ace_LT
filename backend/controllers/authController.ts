@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
-import { transporter } from '../config/email';
+import { sendEmail } from '../config/email';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -45,7 +45,11 @@ export const login = async (req: any, res: any) => {
       `
     };
 
-    await transporter.sendMail(mailOptions);
+    await sendEmail({
+      to: email,
+      subject: (mailOptions as any).subject,
+      html: (mailOptions as any).html
+    });
 
     res.json({ message: 'OTP sent to your email. Please verify to complete login.' });
   } catch (err) {

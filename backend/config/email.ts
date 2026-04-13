@@ -1,23 +1,39 @@
-import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
-import dns from 'node:dns';
-
-// Force Node.js to prioritize IPv4 over IPv6. 
-// This fixes "ENETUNREACH" errors on platforms like Render.
-dns.setDefaultResultOrder('ipv4first');
 
 dotenv.config();
 
-export const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
-  port: parseInt(process.env.EMAIL_PORT || '587'),
-  secure: process.env.EMAIL_PORT === '465',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  // Extra reliability settings
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-});
+/**
+ * Sends an email using Brevo's HTTP API (V3).
+ * This replaces SMTP and avoids "Connection Timeout" issues on platforms like Render.
+ */
+export const sendEmail = async ({ to, subject, html }: { to: string; subject: string; html: string }) => {
+  const apiKey = process.env.EMAIL_PASS;
+  const senderEmail = process.env.EMAIL_FROM || 'adityaprakash91111@gmail.com';
+
+  if (!apiKey) {
+    throw new Error('EMAIL_PASS (API Key) is missing in environment variables');
+  }
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': apiKey,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { name: 'Ace Lawn Tennis Team', email: senderEmail },
+      to: [{ email: to }],
+      subject: subject,
+      htmlContent: html,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error('Brevo API Error:', errorData);
+    throw new Error(`Failed to send email: ${errorData.message || response.statusText}`);
+  }
+
+  return await response.json();
+};
