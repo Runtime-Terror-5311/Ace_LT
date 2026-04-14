@@ -21,10 +21,8 @@ interface AttendanceProps {
 const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
   const [activeView, setActiveView] = useState<'mark' | 'register'>('mark');
   const [attendanceSelections, setAttendanceSelections] = useState<Record<string, boolean>>({});
-  const [records, setRecords] = useState<AttendanceRecord[]>(() => {
-    const saved = localStorage.getItem('ace_attendance_records');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const normalizedMembers = useMemo(() => {
     return members.map((member) => ({
@@ -33,26 +31,53 @@ const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
     }));
   }, [members]);
 
+  const fetchAttendanceRecords = async () => {
+    try {
+      const token = localStorage.getItem('ace_token');
+      const res = await fetch('/api/attendance', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRecords(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch attendance:', err);
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem('ace_attendance_records', JSON.stringify(records));
-  }, [records]);
+    fetchAttendanceRecords();
+  }, []);
 
   const isAdmin = user.role === UserRole.ADMIN;
-  const canMarkAttendance = isAdmin;
+  const isCaptain = user.role === UserRole.CAPTAIN;
+  const isViceCaptain = user.role === UserRole.VICE_CAPTAIN;
+  const isLeadership = isAdmin || isCaptain || isViceCaptain;
+  
+  const canMarkAttendance = isLeadership;
   const todayStr = new Date().toISOString().split('T')[0];
-  const filteredPlayers = normalizedMembers.filter((member) => member.isInducted && member.role !== UserRole.ADMIN);
+  const filteredPlayers = normalizedMembers.filter((member) => member.isInducted);
 
   const todaysRecord = useMemo(
     () => records.find((record) => record.date === todayStr),
     [records, todayStr]
   );
 
+  // Load today's selections if record exists (for editing)
+  useEffect(() => {
+    if (todaysRecord) {
+      setAttendanceSelections(todaysRecord.statuses);
+    }
+  }, [todaysRecord]);
+
   const myRecords = useMemo(
     () => records.filter((record) => record.statuses[user.id] !== undefined),
     [records, user.id]
   );
 
-  const visibleRecords = isAdmin ? records : myRecords;
+  // Attendance Register is now visible to everyone
+  const visibleRecords = records;
 
   const myAttendanceCount = useMemo(() => {
     const present = myRecords.reduce((sum, record) => sum + (record.statuses[user.id] ? 1 : 0), 0);
@@ -61,24 +86,24 @@ const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
 
   const attendanceSummary = useMemo(() => {
     const totalSessions = records.length;
-    const totalPresent = records.reduce((sum, record) => sum + Object.values(record.statuses).filter(Boolean).length, 0);
+    let totalPresent = 0;
+    records.forEach(record => {
+        totalPresent += Object.values(record.statuses).filter(Boolean).length;
+    });
+    
     return {
       totalSessions,
-      averagePercentage: totalSessions ? Math.round((totalPresent / (filteredPlayers.length * totalSessions)) * 100) : 0,
+      averagePercentage: (totalSessions && filteredPlayers.length) ? Math.round((totalPresent / (filteredPlayers.length * totalSessions)) * 100) : 0,
     };
   }, [records, filteredPlayers.length]);
 
   const toggleAttendance = (memberId: string, status: boolean) => {
-    if (!isAdmin) return;
+    if (!canMarkAttendance) return;
     setAttendanceSelections((prev) => ({ ...prev, [memberId]: status }));
   };
 
-  const submitAttendance = () => {
-    if (!isAdmin) return;
-    if (todaysRecord) {
-      alert('Attendance for today has already been submitted.');
-      return;
-    }
+  const submitAttendance = async () => {
+    if (!canMarkAttendance) return;
 
     const selectedCount = Object.keys(attendanceSelections).length;
     if (selectedCount === 0) {
@@ -86,24 +111,53 @@ const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
       return;
     }
 
+    setIsLoading(true);
     const presentCount = Object.values(attendanceSelections).filter(Boolean).length;
-    const newRecord: AttendanceRecord = {
-      id: `r${Date.now()}`,
-      date: todayStr,
-      presentCount,
-      totalCount: filteredPlayers.length,
-      supervisors: normalizedMembers
-        .filter((member) => member.role === UserRole.CAPTAIN || member.role === UserRole.VICE_CAPTAIN)
-        .map((member) => member.name),
-      submittedBy: user.name,
-      statuses: attendanceSelections,
-      createdAt: new Date().toISOString(),
-    };
+    
+    try {
+      const token = localStorage.getItem('ace_token');
+      const res = await fetch('/api/attendance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          date: todayStr,
+          presentCount,
+          totalCount: filteredPlayers.length,
+          supervisors: normalizedMembers
+            .filter((member) => member.role === UserRole.CAPTAIN || member.role === UserRole.VICE_CAPTAIN)
+            .map((member) => member.name),
+          submittedBy: user.name,
+          statuses: attendanceSelections,
+        })
+      });
 
-    setRecords([newRecord, ...records]);
-    setAttendanceSelections({});
-    setActiveView('register');
-    alert('Attendance submitted successfully for today.');
+      if (res.ok) {
+        const savedRecord = await res.json();
+        // Update local state by replacing or adding
+        setRecords(prev => {
+           const exists = prev.findIndex(r => r.date === todayStr);
+           if (exists > -1) {
+             const newArr = [...prev];
+             newArr[exists] = savedRecord;
+             return newArr;
+           }
+           return [savedRecord, ...prev];
+        });
+        setActiveView('register');
+        alert(todaysRecord ? 'Attendance updated successfully.' : 'Attendance submitted successfully.');
+      } else {
+        const data = await res.json();
+        alert(`Failed to save: ${data.message}`);
+      }
+    } catch (err) {
+      console.error('Attendance submit error:', err);
+      alert('Network error. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -111,13 +165,12 @@ const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Attendance Control</h2>
-          <p className="text-sm text-slate-500">{canMarkAttendance ? 'Admins can mark roster attendance for the full team.' : 'View your own attendance history and summary.'}</p>
+          <p className="text-sm text-slate-500">{canMarkAttendance ? 'Leadership can mark roster attendance for the team.' : 'View team attendance history and your personal summary.'}</p>
         </div>
         <div className="flex bg-slate-200/50 p-1.5 rounded-[1.25rem] border border-slate-200 shadow-sm h-fit">
           <button
             onClick={() => setActiveView('mark')}
             className={`px-8 py-2.5 rounded-[1rem] text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'mark' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400'}`}
-            disabled={!canMarkAttendance}
           >
             Mark Attendance
           </button>
@@ -173,15 +226,15 @@ const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
       </div>
 
       {activeView === 'mark' ? (
-        isAdmin ? (
+        canMarkAttendance ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-4 space-y-6">
               <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
                 <div className="flex items-center gap-3 mb-6">
                   <ShieldCheck size={18} className="text-emerald-600" />
-                  <h3 className="font-black text-slate-900 uppercase tracking-[0.2em] text-[10px]">Admin Control</h3>
+                  <h3 className="font-black text-slate-900 uppercase tracking-[0.2em] text-[10px]">Leadership Control</h3>
                 </div>
-                <p className="text-sm text-slate-500 leading-relaxed">Only administrators can mark attendance for the full registered roster.</p>
+                <p className="text-sm text-slate-500 leading-relaxed">Admins, Captains, and Vice-Captains can mark attendance for the team roster.</p>
               </div>
 
               <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
@@ -194,12 +247,23 @@ const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
                     {todaysRecord ? 'Submitted' : 'Pending'}
                   </div>
                 </div>
+                
+                {todaysRecord && (
+                  <div className="mb-6 p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
+                     <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1">Status Summary</p>
+                     <p className="text-xs text-emerald-600 font-bold">
+                        Submitted by: {todaysRecord.submittedBy}
+                        {todaysRecord.lastEditedBy && todaysRecord.lastEditedBy !== todaysRecord.submittedBy && ` • Edited by: ${todaysRecord.lastEditedBy}`}
+                     </p>
+                  </div>
+                )}
+
                 <button
                   onClick={submitAttendance}
-                  disabled={!!todaysRecord}
-                  className={`w-full py-4 rounded-[1.5rem] text-sm font-black uppercase tracking-widest transition-all ${todaysRecord ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
+                  disabled={isLoading}
+                  className={`w-full py-4 rounded-[1.5rem] text-sm font-black uppercase tracking-widest transition-all ${isLoading ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
                 >
-                  {todaysRecord ? 'Attendance Recorded' : 'Submit Attendance'}
+                  {isLoading ? 'Saving...' : (todaysRecord ? 'Update Attendance' : 'Submit Attendance')}
                 </button>
               </div>
             </div>
@@ -214,7 +278,7 @@ const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
                   <div key={player.id} className="p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
                     <div>
                       <p className="font-black text-slate-900 text-lg">{player.name}</p>
-                      <p className="text-xs uppercase tracking-widest text-slate-400">{player.regNo} � Year {player.currentYear ?? 'N/A'}</p>
+                      <p className="text-xs uppercase tracking-widest text-slate-400">{player.regNo} • Year {player.currentYear ?? 'N/A'}</p>
                     </div>
                     <div className="flex gap-3 flex-wrap">
                       <button
@@ -247,10 +311,10 @@ const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
               <CheckCircle2 size={24} className="text-emerald-600" />
               <div>
                 <p className="text-sm uppercase tracking-[0.3em] text-slate-400 font-black">Attendance access</p>
-                <p className="text-lg font-black text-slate-900">Only admins can mark team attendance.</p>
+                <p className="text-lg font-black text-slate-900">Only leadership can mark team attendance.</p>
               </div>
             </div>
-            <p className="text-sm text-slate-500">Your attendance is visible here, but only administrators can update the team roster attendance.</p>
+            <p className="text-sm text-slate-500">Your attendance overview is visible here, but only administrators or captains can update the team roster attendance.</p>
           </div>
         )
       ) : (
@@ -259,7 +323,7 @@ const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-3"><History size={24} className="text-emerald-600" /> Attendance Register</h3>
-                <p className="text-sm text-slate-500 mt-2">Session history for the registered roster.</p>
+                <p className="text-sm text-slate-500 mt-2">Team-wide session history for the current roster.</p>
               </div>
               <div className="text-sm uppercase tracking-[0.2em] text-slate-400 font-black">{visibleRecords.length} sessions</div>
             </div>
@@ -271,26 +335,30 @@ const Attendance: React.FC<AttendanceProps> = ({ user, members }) => {
                   <th className="px-12 py-6">Date</th>
                   <th className="px-12 py-6">Present</th>
                   <th className="px-12 py-6">Total</th>
-                  <th className="px-12 py-6">Marked By</th>
+                  <th className="px-12 py-6">Supervisors</th>
                   <th className="px-12 py-6">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {visibleRecords.map((record) => {
                   const myStatus = record.statuses[user.id];
-                  const statusLabel = isAdmin ? `${record.presentCount}/${record.totalCount}` : myStatus ? 'Present' : 'Absent';
-                  const statusClass = isAdmin ? 'bg-slate-100 text-slate-500' : myStatus ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700';
+                  const statusLabel = isLeadership ? `${record.presentCount}/${record.totalCount}` : (myStatus === undefined ? 'N/A' : myStatus ? 'Present' : 'Absent');
+                  const statusClass = isLeadership ? 'bg-slate-100 text-slate-500' : (myStatus === undefined ? 'bg-slate-50 text-slate-300' : myStatus ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700');
+                  
                   return (
                     <tr key={record.id} className="hover:bg-slate-50/50 transition-all">
                       <td className="px-12 py-8">
                         <div className="flex flex-col gap-1">
                           <span className="font-black text-slate-900">{new Date(record.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                          <span className="text-[10px] uppercase tracking-[0.2em] text-slate-400">{record.submittedBy}</span>
+                          <span className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                             By: {record.submittedBy}
+                             {record.lastEditedBy && record.lastEditedBy !== record.submittedBy && <span className="text-emerald-500"> (Edited by {record.lastEditedBy})</span>}
+                          </span>
                         </div>
                       </td>
                       <td className="px-12 py-8">{record.presentCount}</td>
                       <td className="px-12 py-8">{record.totalCount}</td>
-                      <td className="px-12 py-8">{record.supervisors.join(', ')}</td>
+                      <td className="px-12 py-8 text-xs font-bold text-slate-500">{record.supervisors && record.supervisors.length > 0 ? record.supervisors.join(', ') : 'None'}</td>
                       <td className="px-12 py-8">
                         <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.15em] ${statusClass}`}>
                           {statusLabel}

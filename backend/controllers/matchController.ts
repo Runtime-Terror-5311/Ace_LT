@@ -10,10 +10,7 @@ export const getMatches = async (req: any, res: any) => {
 };
 
 export const createMatch = async (req: any, res: any) => {
-  const userRole = (req as any).user.role;
-  if (userRole !== 'captain' && userRole !== 'admin' && userRole !== 'viceCaptain') {
-    return res.status(403).json({ message: 'Unauthorized to create matches' });
-  }
+  // Any authenticated user can record a match
 
   try {
     const newMatch = await Match.create(req.body);

@@ -88,8 +88,9 @@ export const registerUser = async (req: any, res: any) => {
 
 export const deleteUser = async (req: any, res: any) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ message: 'Only admins can delete members.' });
+    const allowedLeadership = ['admin', 'captain', 'viceCaptain'];
+    if (!allowedLeadership.includes(req.user?.role)) {
+      return res.status(403).json({ message: 'Only leadership can delete members.' });
     }
 
     const { id } = req.params;
@@ -115,8 +116,9 @@ export const deleteUser = async (req: any, res: any) => {
 
 export const togglePaymentStatus = async (req: any, res: any) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ message: 'Only admins can update payment status.' });
+    const allowedLeadership = ['admin', 'captain', 'viceCaptain'];
+    if (!allowedLeadership.includes(req.user?.role)) {
+      return res.status(403).json({ message: 'Only leadership can update payment status.' });
     }
 
     const { id } = req.params;

@@ -101,3 +101,15 @@ const calendarEventSchema = new mongoose.Schema({
 
 export const CalendarEvent = mongoose.model('CalendarEvent', calendarEventSchema);
 
+const attendanceSchema = new mongoose.Schema({
+  date: { type: String, required: true, unique: true }, // YYYY-MM-DD
+  presentCount: { type: Number, required: true },
+  totalCount: { type: Number, required: true },
+  submittedBy: { type: String, required: true },
+  lastEditedBy: { type: String },
+  supervisors: [String],
+  statuses: { type: Map, of: Boolean, required: true }
+}, { timestamps: true });
+
+export const Attendance = mongoose.model('Attendance', attendanceSchema);
+

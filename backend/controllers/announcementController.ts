@@ -13,8 +13,9 @@ export const getAnnouncements = async (req: any, res: any) => {
 export const createAnnouncement = async (req: any, res: any) => {
   try {
     // Only admin can create
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ message: 'Only admin can create announcements.' });
+    const allowedLeadership = ['admin', 'captain', 'viceCaptain'];
+    if (!allowedLeadership.includes(req.user?.role)) {
+      return res.status(403).json({ message: 'Only leadership can create announcements.' });
     }
 
     const { title, content, urgent, author } = req.body;

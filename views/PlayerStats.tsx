@@ -13,14 +13,22 @@ const PlayerStatsView: React.FC<PlayerStatsProps> = ({ user, members }) => {
   const [matchHistory, setMatchHistory] = useState<Match[]>([]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('ace_match_history');
-    if (saved) {
+    const fetchMatches = async () => {
       try {
-        setMatchHistory(JSON.parse(saved));
-      } catch {
-        setMatchHistory([]);
+        const token = localStorage.getItem('ace_token');
+        const res = await fetch('/api/matches', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setMatchHistory(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch match history:', err);
       }
-    }
+    };
+
+    fetchMatches();
   }, []);
 
   const statsData = useMemo(() => {
@@ -37,7 +45,6 @@ const PlayerStatsView: React.FC<PlayerStatsProps> = ({ user, members }) => {
     }>();
 
     members
-      .filter((m) => m.role !== UserRole.ADMIN)
       .forEach((member) => {
         map.set(member.name, {
           name: member.name,

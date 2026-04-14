@@ -53,7 +53,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ user, onLogout, pendi
     { name: 'Achievements', icon: Trophy, path: '/dashboard/achievements', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN] },
     { name: 'Alumni', icon: GraduationCap, path: '/dashboard/alumni', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN] },
     { name: 'Profile', icon: Settings, path: '/dashboard/settings', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN, UserRole.MEMBER] },
-    { name: 'Admin Panel', icon: ShieldPlus, path: '/dashboard/admin', roles: [UserRole.ADMIN] },
+    { name: 'Admin Panel', icon: ShieldPlus, path: '/dashboard/admin', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN] },
   ];
 
   const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));

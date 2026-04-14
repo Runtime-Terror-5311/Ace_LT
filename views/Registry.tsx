@@ -29,7 +29,8 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
     email: '',
     year: '1',
     imageUrl: '',
-    gender: ''
+    gender: '',
+    role: UserRole.MEMBER
   });
 
   // Capacity Logic
@@ -64,8 +65,8 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
           phone: newInductee.regNo, // default password = regNo
           gender: newInductee.gender,
           currentYear: parseInt(newInductee.year),
-          designation: 'Member',
-          role: 'member'
+          designation: newInductee.role.charAt(0).toUpperCase() + newInductee.role.slice(1),
+          role: newInductee.role
         })
       });
 
@@ -78,7 +79,7 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
           name: newInductee.name,
           email: newInductee.email,
           regNo: newInductee.regNo,
-          role: UserRole.MEMBER,
+          role: newInductee.role as UserRole,
           gender: newInductee.gender, 
           isInducted: true,
           currentYear: parseInt(newInductee.year),
@@ -88,7 +89,7 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
         };
 
         setMembers([newMember, ...members]);
-        setNewInductee({ name: '', regNo: '', email: '', year: '1', imageUrl: '', gender: '' });
+        setNewInductee({ name: '', regNo: '', email: '', year: '1', imageUrl: '', gender: '', role: UserRole.MEMBER });
         alert(`${newMember.name} has been inducted successfully into the ${newInductee.gender} category. They can now login with their email and regNo (password = regNo).`);
       } else {
         alert(`Induction failed: ${data.message}`);
@@ -144,22 +145,7 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
   };
 
   const canRemoveMember = (target: User) => {
-    if (isAdmin) return target.id !== user.id;
-    if (user.id === target.id) return false;
-    
-    const userYear = user.currentYear || 0;
-    const targetYear = target.currentYear || 0;
-
-    if (targetYear >= userYear) return false;
-
-    if (isCaptain) {
-      return target.role === UserRole.VICE_CAPTAIN || target.role === UserRole.MEMBER;
-    }
-
-    if (isViceCaptain) {
-      return target.role === UserRole.MEMBER;
-    }
-
+    if (isAdmin || isCaptain || isViceCaptain) return target.id !== user.id;
     return false;
   };
 
@@ -310,6 +296,16 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
                       <option value="2">Year 2</option>
                       <option value="3">Year 3</option>
                       <option value="4">Year 4</option>
+                    </select>
+                    <select 
+                      className="flex-1 bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 text-xs font-bold outline-none cursor-pointer"
+                      value={newInductee.role}
+                      onChange={(e) => setNewInductee({...newInductee, role: e.target.value as UserRole})}
+                    >
+                      <option value={UserRole.MEMBER}>Member</option>
+                      <option value={UserRole.CAPTAIN}>Captain</option>
+                      <option value={UserRole.VICE_CAPTAIN}>Vice Captain</option>
+                      <option value={UserRole.ADMIN}>Admin</option>
                     </select>
                     <button type="submit" className="emerald-gradient text-white p-3 rounded-xl shadow-lg hover:opacity-90 active:scale-95 transition-all">
                       <PlusCircle size={20} />

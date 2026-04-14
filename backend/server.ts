@@ -12,6 +12,7 @@ import userRoutes from './routes/userRoutes';
 import requestRoutes from './routes/requestRoutes';
 import announcementRoutes from './routes/announcementRoutes';
 import eventRoutes from './routes/eventRoutes';
+import attendanceRoutes from './routes/attendanceRoutes';
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ async function startServer() {
   app.use('/api/requests', requestRoutes);
   app.use('/api/announcements', announcementRoutes);
   app.use('/api/events', eventRoutes);
+  app.use('/api/attendance', attendanceRoutes);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
