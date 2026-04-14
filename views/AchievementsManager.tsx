@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { Trophy, Plus, Trash2, Camera, Calendar, FileText, Send, X, ShieldCheck } from 'lucide-react';
+import { Trophy, Plus, Trash2, Camera, Calendar, FileText, Send, X, ShieldCheck, Loader } from 'lucide-react';
 import { User, Achievement } from '@/types';
+import ImageUpload from '@/components/ImageUpload';
 
 interface AchievementsManagerProps {
   user: User;
@@ -11,6 +12,7 @@ interface AchievementsManagerProps {
 
 const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achievements, setAchievements }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [newAch, setNewAch] = useState({
     title: '',
     description: '',
@@ -18,26 +20,63 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
     date: new Date().toISOString().split('T')[0]
   });
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAch.title || !newAch.imageUrl) return;
 
-    const ach: Achievement = {
-      id: `ac-${Date.now()}`,
-      title: newAch.title,
-      description: newAch.description,
-      imageUrl: newAch.imageUrl,
-      date: newAch.date
-    };
+    setIsSaving(true);
+    try {
+      const token = localStorage.getItem('ace_token');
+      const response = await fetch('/api/achievements', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: newAch.title,
+          description: newAch.description,
+          imageUrl: newAch.imageUrl,
+          date: newAch.date
+        })
+      });
 
-    setAchievements(prev => [ach, ...prev]);
-    setIsModalOpen(false);
-    setNewAch({ title: '', description: '', imageUrl: '', date: new Date().toISOString().split('T')[0] });
+      if (response.ok) {
+        const savedAch = await response.json();
+        setAchievements(prev => [savedAch, ...prev]);
+        setIsModalOpen(false);
+        setNewAch({ title: '', description: '', imageUrl: '', date: new Date().toISOString().split('T')[0] });
+      } else {
+        alert('Failed to save achievement');
+      }
+    } catch (err) {
+      console.error('Error saving achievement:', err);
+      alert('Error saving achievement');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const removeAchievement = (id: string) => {
+  const removeAchievement = async (id: string) => {
     if (window.confirm('Delete this achievement? It will be removed from the home screen slideshow.')) {
-      setAchievements(prev => prev.filter(a => a.id !== id));
+      try {
+        const token = localStorage.getItem('ace_token');
+        const response = await fetch(`/api/achievements/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          setAchievements(prev => prev.filter(a => a.id !== id));
+        } else {
+          alert('Failed to delete achievement');
+        }
+      } catch (err) {
+        console.error('Error deleting achievement:', err);
+        alert('Error deleting achievement');
+      }
     }
   };
 
@@ -120,17 +159,13 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Display Image URL</label>
-                <div className="relative">
-                  <input 
-                    required 
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-12 text-xs font-bold outline-none focus:ring-1 focus:ring-emerald-500"
-                    value={newAch.imageUrl}
-                    onChange={(e) => setNewAch({...newAch, imageUrl: e.target.value})}
-                  />
-                  <Camera className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                </div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Achievement Image</label>
+                <ImageUpload
+                  onUploadComplete={(url) => setNewAch({...newAch, imageUrl: url})}
+                  label=""
+                  folder="achievements"
+                  currentImage={newAch.imageUrl}
+                />
               </div>
 
               <div className="grid grid-cols-1 gap-4">
@@ -172,9 +207,18 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
 
               <button 
                 type="submit"
-                className="w-full py-5 emerald-gradient text-white rounded-[1.25rem] font-black text-sm uppercase tracking-widest shadow-xl hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                disabled={isSaving}
+                className="w-full py-5 emerald-gradient text-white rounded-[1.25rem] font-black text-sm uppercase tracking-widest shadow-xl hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
               >
-                <Send size={18} /> Publish to Home Screen
+                {isSaving ? (
+                  <>
+                    <Loader size={18} className="animate-spin" /> Saving...
+                  </>
+                ) : (
+                  <>
+                    <Send size={18} /> Publish to Home Screen
+                  </>
+                )}
               </button>
             </form>
           </div>

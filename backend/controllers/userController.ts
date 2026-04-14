@@ -56,7 +56,7 @@ export const registerUser = async (req: any, res: any) => {
       phone
     });
 
-    // Create User entry (password = phone number, same as seed logic)
+    // Create User entry (password = phone number)
     const newUser = await User.create({
       name,
       email: email.toLowerCase(),
@@ -140,6 +140,7 @@ export const togglePaymentStatus = async (req: any, res: any) => {
   }
 };
 
+<<<<<<< HEAD
 export const updateUserProfile = async (req: any, res: any) => {
   try {
     const { avatar } = req.body;
@@ -160,6 +161,38 @@ export const updateUserProfile = async (req: any, res: any) => {
     }
 
     res.json({ message: 'Profile updated successfully', user: updatedUser });
+=======
+export const updateProfile = async (req: any, res: any) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { avatar, name, email, phone, designation } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update allowed fields
+    if (avatar !== undefined) user.avatar = avatar;
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (phone) user.phone = phone;
+    if (designation) user.designation = designation;
+
+    await user.save();
+
+    // Return user without sensitive fields
+    const userResponse = user.toObject();
+    delete (userResponse as any).password;
+    delete (userResponse as any).otp;
+    delete (userResponse as any).otpExpiry;
+
+    res.json(userResponse);
+>>>>>>> 75a78a7 (Fixed image uploading and removed unwanted files)
   } catch (err) {
     console.error('Update profile error:', err);
     res.status(500).json({ message: 'Error updating profile' });

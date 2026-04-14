@@ -4,7 +4,6 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { connectDB } from './config/db';
-import { seedDatabase } from './utils/seed';
 import authRoutes from './routes/authRoutes';
 import { getMatches, createMatch, deleteAllMatches } from './controllers/matchController';
 import { authenticateToken } from './middleware/auth';
@@ -13,7 +12,13 @@ import userRoutes from './routes/userRoutes';
 import requestRoutes from './routes/requestRoutes';
 import announcementRoutes from './routes/announcementRoutes';
 import eventRoutes from './routes/eventRoutes';
+<<<<<<< HEAD
 import attendanceRoutes from './routes/attendanceRoutes';
+=======
+import achievementRoutes from './routes/achievementRoutes';
+import alumniRoutes from './routes/alumniRoutes';
+import uploadRoutes from './routes/uploadRoutes';
+>>>>>>> 75a78a7 (Fixed image uploading and removed unwanted files)
 
 dotenv.config();
 
@@ -35,9 +40,8 @@ async function startServer() {
   app.use(express.json());
   app.use(cors());
 
-  // Connect to DB and Seed
+  // Connect to DB
   await connectDB();
-  await seedDatabase();
 
   // Routes
   app.use('/api/auth', authRoutes);
@@ -49,7 +53,13 @@ async function startServer() {
   app.use('/api/requests', requestRoutes);
   app.use('/api/announcements', announcementRoutes);
   app.use('/api/events', eventRoutes);
+<<<<<<< HEAD
   app.use('/api/attendance', attendanceRoutes);
+=======
+  app.use('/api/achievements', achievementRoutes);
+  app.use('/api/alumni', alumniRoutes);
+  app.use('/api/uploads', uploadRoutes);
+>>>>>>> 75a78a7 (Fixed image uploading and removed unwanted files)
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
@@ -72,16 +82,11 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath) );
-    app.get('*all', (_req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  app.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-
-  // Error handling
   app.use((err: any, req: any, res: any, next: any) => {
     console.error('Unhandled error:', err);
     if (res.headersSent) {
@@ -89,6 +94,13 @@ async function startServer() {
     }
     res.status(500).json({ message: 'Internal Server Error' });
   });
+
+  app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  // Error handling
+  
 }
 
 startServer().catch(err => {

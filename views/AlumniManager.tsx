@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { GraduationCap, Plus, Trash2, Camera, User, Hash, Phone, Send, X, ShieldCheck } from 'lucide-react';
+import { GraduationCap, Plus, Trash2, Camera, User, Hash, Phone, Send, X, ShieldCheck, Loader } from 'lucide-react';
 import { User as UserType, Alumni, UserRole } from '@/types';
+import ImageUpload from '@/components/ImageUpload';
 
 interface AlumniManagerProps {
   user: UserType;
@@ -11,6 +12,7 @@ interface AlumniManagerProps {
 
 const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [newAlumnus, setNewAlumnus] = useState({
     name: '',
     regNo: '',
@@ -19,23 +21,58 @@ const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }
     batch: new Date().getFullYear().toString()
   });
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAlumnus.name || !newAlumnus.imageUrl) return;
 
-    const alum: Alumni = {
-      id: `al-${Date.now()}`,
-      ...newAlumnus
-    };
+    setIsSaving(true);
+    try {
+      const token = localStorage.getItem('ace_token');
+      const response = await fetch('/api/alumni', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(newAlumnus)
+      });
 
-    setAlumni(prev => [alum, ...prev]);
-    setIsModalOpen(false);
-    setNewAlumnus({ name: '', regNo: '', contact: '', imageUrl: '', batch: new Date().getFullYear().toString() });
+      if (response.ok) {
+        const savedAlum = await response.json();
+        setAlumni(prev => [savedAlum, ...prev]);
+        setIsModalOpen(false);
+        setNewAlumnus({ name: '', regNo: '', contact: '', imageUrl: '', batch: new Date().getFullYear().toString() });
+      } else {
+        alert('Failed to save alumni');
+      }
+    } catch (err) {
+      console.error('Error saving alumni:', err);
+      alert('Error saving alumni');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const removeAlumnus = (id: string) => {
+  const removeAlumnus = async (id: string) => {
     if (window.confirm('Do you want to remove this alumni?')) {
-      setAlumni(prev => prev.filter(a => a.id !== id));
+      try {
+        const token = localStorage.getItem('ace_token');
+        const response = await fetch(`/api/alumni/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          setAlumni(prev => prev.filter(a => a.id !== id));
+        } else {
+          alert('Failed to delete alumni');
+        }
+      } catch (err) {
+        console.error('Error deleting alumni:', err);
+        alert('Error deleting alumni');
+      }
     }
   };
 
@@ -180,17 +217,13 @@ const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Photo URL</label>
-                <div className="relative">
-                  <input 
-                    required 
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-12 text-xs font-bold outline-none focus:ring-1 focus:ring-emerald-500"
-                    value={newAlumnus.imageUrl}
-                    onChange={(e) => setNewAlumnus({...newAlumnus, imageUrl: e.target.value})}
-                  />
-                  <Camera className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                </div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Profile Photo</label>
+                <ImageUpload
+                  onUploadComplete={(url) => setNewAlumnus({...newAlumnus, imageUrl: url})}
+                  label=""
+                  folder="alumni"
+                  currentImage={newAlumnus.imageUrl}
+                />
               </div>
 
               <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-start gap-3 text-emerald-700">

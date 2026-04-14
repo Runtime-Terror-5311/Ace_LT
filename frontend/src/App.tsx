@@ -17,27 +17,34 @@ import Registry from '@views/Registry';
 import AchievementsManager from '@views/AchievementsManager';
 import AlumniManager from '@views/AlumniManager';
 import { User, UserRole, EquipmentRequest, InventoryItem, Achievement, Alumni } from './types';
-import { MOCK_USERS, MOCK_INVENTORY, MOCK_ACHIEVEMENTS, MOCK_ALUMNI } from './mockData';
-
-const parseLocalStorage = <T,>(key: string, fallback: T): T => {
-  try {
-    const saved = localStorage.getItem(key);
-    if (!saved) return fallback;
-    return JSON.parse(saved) as T;
-  } catch (err) {
-    console.warn(`Invalid localStorage item '${key}', clearing it.`, err);
-    localStorage.removeItem(key);
-    return fallback;
-  }
-};
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(() => parseLocalStorage<User | null>('ace_user', null));
+  const [user, setUser] = useState<User | null>(null);
 
-  const [members, setMembers] = useState<User[]>(() => parseLocalStorage<User[]>('ace_members', MOCK_USERS));
+  useEffect(() => {
+    const restoreSession = async () => {
+      const token = localStorage.getItem('ace_token');
+      const storedUser = localStorage.getItem('ace_user');
+      
+      if (token && storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (err) {
+          console.warn('Failed to restore session from localStorage');
+          localStorage.removeItem('ace_token');
+          localStorage.removeItem('ace_user');
+        }
+      }
+    };
 
-  const [inventory, setInventory] = useState<InventoryItem[]>(MOCK_INVENTORY);
+    restoreSession();
+  }, []);
+
+  const [members, setMembers] = useState<User[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [requests, setRequests] = useState<EquipmentRequest[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [alumni, setAlumni] = useState<Alumni[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -48,10 +55,13 @@ const App: React.FC = () => {
       const headers = { 'Authorization': `Bearer ${token}` };
 
       try {
-        const [usersRes, inventoryRes, requestsRes] = await Promise.all([
+        const [usersRes, inventoryRes, requestsRes, achievementsRes, alumniRes] = await Promise.all([
           fetch('/api/users', { headers }),
           fetch('/api/inventory', { headers }),
-          fetch('/api/requests', { headers })
+          fetch('/api/requests', { headers }),
+          fetch('/api/achievements', { headers }),
+          fetch('/api/alumni', { headers })
+          
         ]);
 
         const authFailed = [usersRes, inventoryRes, requestsRes].some(res => res.status === 401 || res.status === 403);
@@ -81,6 +91,14 @@ const App: React.FC = () => {
           const requestsData = await requestsRes.json();
           setRequests(requestsData);
         }
+        if (achievementsRes.ok) {
+          const achievementsData = await achievementsRes.json();
+          setAchievements(achievementsData);
+        }
+        if (alumniRes.ok) {
+          const alumniData = await alumniRes.json();
+          setAlumni(alumniData);
+        }
       } catch (err) {
         console.error('Error fetching data:', err);
       }
@@ -89,26 +107,10 @@ const App: React.FC = () => {
     fetchData();
   }, [user]);
 
-  const [achievements, setAchievements] = useState<Achievement[]>(() => parseLocalStorage<Achievement[]>('ace_achievements', MOCK_ACHIEVEMENTS));
-
-  const [alumni, setAlumni] = useState<Alumni[]>(() => parseLocalStorage<Alumni[]>('ace_alumni', MOCK_ALUMNI));
-
-  useEffect(() => {
-    localStorage.setItem('ace_achievements', JSON.stringify(achievements));
-  }, [achievements]);
-
-  useEffect(() => {
-    localStorage.setItem('ace_alumni', JSON.stringify(alumni));
-  }, [alumni]);
-
-  useEffect(() => {
-    localStorage.setItem('ace_members', JSON.stringify(members));
-  }, [members]);
-
   const handleLogin = async (email: string, password: string, regNo: string, otp?: string) => {
     try {
       let endpoint = '/api/auth/login';
-      let body = { email, password, regNo };
+      let body: Record<string, string> = { email, password, regNo };
 
       if (otp) {
         endpoint = '/api/auth/verify-otp';

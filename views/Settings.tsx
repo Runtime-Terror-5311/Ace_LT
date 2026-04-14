@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { User as UserIcon, Bell, Shield, Smartphone, Globe, Save, Camera, X } from 'lucide-react';
+import { User as UserIcon, Bell, Shield, Smartphone, Globe, Camera, Loader } from 'lucide-react';
 import { User } from '@/types';
+import { uploadToCloudinary } from '@/utils/cloudinary';
 
 interface SettingsProps {
   user: User;
@@ -12,6 +13,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
   const [photoUrl, setPhotoUrl] = useState(user.avatar || '');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+<<<<<<< HEAD
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -37,6 +39,40 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
     } catch (err) {
       console.error('Update profile error:', err);
       alert('Network error during profile update.');
+=======
+  const [error, setError] = useState<string | null>(null);
+
+  // Save profile with updated avatar
+  const saveProfile = async (newPhotoUrl: string) => {
+    setIsSaving(true);
+    try {
+      const token = localStorage.getItem('ace_token');
+      const response = await fetch('/api/users/update-profile', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...user,
+          avatar: newPhotoUrl
+        })
+      });
+
+      if (response.ok) {
+        const updatedUser = await response.json();
+        onUserUpdate(updatedUser);
+        // Trigger public home page refresh if user is leader
+        if (user.role === 'captain' || user.role === 'viceCaptain') {
+          window.dispatchEvent(new CustomEvent('leadershipUpdated'));
+        }
+      } else {
+        setError('Failed to save profile');
+      }
+    } catch (err) {
+      setError('Error saving profile');
+      console.error(err);
+>>>>>>> 75a78a7 (Fixed image uploading and removed unwanted files)
     } finally {
       setIsSaving(false);
     }
@@ -47,6 +83,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
     if (!file) return;
 
     setIsUploading(true);
+<<<<<<< HEAD
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', 'Ace-LT');
@@ -66,6 +103,17 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
     } catch (err) {
       console.error('Upload error:', err);
       alert('Network error during image upload.');
+=======
+    setError(null);
+
+    try {
+      const url = await uploadToCloudinary(file, { folder: 'avatars' });
+      setPhotoUrl(url);
+      await saveProfile(url);
+    } catch (err) {
+      setError('Upload failed. Please try again.');
+      console.error(err);
+>>>>>>> 75a78a7 (Fixed image uploading and removed unwanted files)
     } finally {
       setIsUploading(false);
     }
@@ -99,34 +147,40 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
                    <UserIcon size={48} className="text-slate-200" />
                  )}
               </div>
-              <label className="absolute -bottom-2 -right-2 w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center cursor-pointer shadow-lg hover:bg-emerald-700 transition-all hover:scale-110">
-                <Camera size={20} />
-                <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+              <label className="absolute -bottom-2 -right-2 w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center cursor-pointer shadow-lg hover:bg-emerald-700 transition-all hover:scale-110 disabled:opacity-50">
+                {isUploading ? (
+                  <Loader size={20} className="animate-spin" />
+                ) : (
+                  <Camera size={20} />
+                )}
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                />
               </label>
            </div>
            
            <div className="flex-1 space-y-4 w-full">
               <div>
                 <h3 className="font-black text-slate-900 tracking-tight text-lg leading-tight">Profile Identity</h3>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">This photo is displayed in leadership and registry records.</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Click the camera icon to upload your photo</p>
               </div>
-              
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Image URL (Optional)</label>
-                <div className="flex gap-2">
-                  <input 
-                    placeholder="https://images.unsplash.com/..." 
-                    className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
-                    value={photoUrl}
-                    onChange={(e) => setPhotoUrl(e.target.value)}
-                  />
-                  {photoUrl && (
-                    <button onClick={() => setPhotoUrl('')} className="p-3 text-slate-400 hover:text-red-500 transition-colors">
-                      <X size={18} />
-                    </button>
-                  )}
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs font-semibold">
+                  {error}
                 </div>
-              </div>
+              )}
+
+              {isUploading && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-xs font-semibold flex items-center gap-2">
+                  <Loader size={14} className="animate-spin" />
+                  Uploading to Cloudinary...
+                </div>
+              )}
            </div>
         </section>
 
@@ -198,16 +252,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
             </button>
           </div>
         </section>
-
-        <div className="flex justify-end pt-4">
-          <button 
-            onClick={handleSave}
-            disabled={isSaving}
-            className="flex items-center gap-2 px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
-          >
-            {isSaving ? 'UPDATING...' : <><Save size={18} /> SAVE CHANGES</>}
-          </button>
-        </div>
       </div>
     </div>
   );

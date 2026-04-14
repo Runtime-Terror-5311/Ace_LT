@@ -29,13 +29,21 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
+interface MenuItem {
+  name: string;
+  icon: React.ComponentType<any>;
+  path: string;
+  roles: UserRole[];
+  showBadge?: boolean;
+}
+
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ user, onLogout, pendingCount = 0, children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
 
   const isAdminOrCaptain = user.role === UserRole.ADMIN || user.role === UserRole.CAPTAIN || user.role === UserRole.VICE_CAPTAIN;
 
-  const menuItems = [
+  const menuItems: MenuItem[] = [
     { name: 'Overview', icon: LayoutDashboard, path: '/dashboard', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN, UserRole.MEMBER] },
     { name: 'Matches', icon: Swords, path: '/dashboard/matches', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN, UserRole.MEMBER] },
     { name: 'Leaderboard', icon: BarChart3, path: '/dashboard/stats', roles: [UserRole.ADMIN, UserRole.CAPTAIN, UserRole.VICE_CAPTAIN, UserRole.MEMBER] },
