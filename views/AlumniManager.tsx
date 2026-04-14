@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { GraduationCap, Plus, Trash2, Camera, User, Hash, Phone, Send, X, ShieldCheck, Loader } from 'lucide-react';
+import { GraduationCap, Plus, Trash2, Edit, User, Hash, Phone, Send, X, ShieldCheck, Loader } from 'lucide-react';
 import { User as UserType, Alumni, UserRole } from '@/types';
 import ImageUpload from '@/components/ImageUpload';
 
@@ -12,6 +12,8 @@ interface AlumniManagerProps {
 
 const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [newAlumnus, setNewAlumnus] = useState({
     name: '',
@@ -21,6 +23,26 @@ const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }
     batch: new Date().getFullYear().toString()
   });
 
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setIsEditMode(false);
+    setEditingId(null);
+    setNewAlumnus({ name: '', regNo: '', contact: '', imageUrl: '', batch: '' });
+  };
+
+  const openEditModal = (alumnus: Alumni) => {
+    setEditingId(alumnus._id);
+    setIsEditMode(true);
+    setNewAlumnus({
+      name: alumnus.name,
+      regNo: alumnus.regNo,
+      contact: alumnus.contact,
+      imageUrl: alumnus.imageUrl,
+      batch: alumnus.batch
+    });
+    setIsModalOpen(true);
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAlumnus.name || !newAlumnus.imageUrl) return;
@@ -28,26 +50,49 @@ const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }
     setIsSaving(true);
     try {
       const token = localStorage.getItem('ace_token');
-      const response = await fetch('/api/alumni', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(newAlumnus)
-      });
+      
+      if (isEditMode && editingId) {
+        // Edit existing alumni
+        const response = await fetch(`/api/alumni/${editingId}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(newAlumnus)
+        });
 
-      if (response.ok) {
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to update alumni');
+        }
+
+        const updatedAlum = await response.json();
+        setAlumni(prev => prev.map(a => a._id === editingId ? updatedAlum : a));
+        closeModal();
+      } else {
+        // Create new alumni
+        const response = await fetch('/api/alumni', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(newAlumnus)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to save alumni');
+        }
+
         const savedAlum = await response.json();
         setAlumni(prev => [savedAlum, ...prev]);
-        setIsModalOpen(false);
-        setNewAlumnus({ name: '', regNo: '', contact: '', imageUrl: '', batch: new Date().getFullYear().toString() });
-      } else {
-        alert('Failed to save alumni');
+        closeModal();
       }
     } catch (err) {
       console.error('Error saving alumni:', err);
-      alert('Error saving alumni');
+      alert(err instanceof Error ? err.message : 'Error saving alumni');
     } finally {
       setIsSaving(false);
     }
@@ -60,18 +105,20 @@ const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }
         const response = await fetch(`/api/alumni/${id}`, {
           method: 'DELETE',
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
           }
         });
 
-        if (response.ok) {
-          setAlumni(prev => prev.filter(a => a.id !== id));
-        } else {
-          alert('Failed to delete alumni');
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to delete alumni');
         }
+
+        setAlumni(prev => prev.filter(a => a._id !== id));
       } catch (err) {
         console.error('Error deleting alumni:', err);
-        alert('Error deleting alumni');
+        alert(err instanceof Error ? err.message : 'Error deleting alumni');
       }
     }
   };
@@ -95,16 +142,25 @@ const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {alumni.map((alum) => (
-          <div key={alum.id} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm group hover:shadow-md transition-all relative">
-            {/* Delete button positioned precisely as in the screenshot */}
+          <div key={alum._id} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm group hover:shadow-md transition-all relative">
+            {/* Delete and Edit buttons positioned at top right */}
             {isLeadership && (
-              <button 
-                onClick={() => removeAlumnus(alum.id)}
-                className="absolute top-8 right-8 p-2.5 text-slate-200 hover:text-red-500 transition-all bg-slate-50/50 hover:bg-red-50 rounded-xl z-20"
-                title="Remove Alumni"
-              >
-                <Trash2 size={18} />
-              </button>
+              <div className="absolute top-8 right-8 flex items-center gap-2 z-20">
+                <button 
+                  onClick={() => openEditModal(alum)}
+                  className="p-2.5 text-slate-200 hover:text-emerald-600 transition-all bg-slate-50/50 hover:bg-emerald-50 rounded-xl"
+                  title="Edit Alumni"
+                >
+                  <Edit size={18} />
+                </button>
+                <button 
+                  onClick={() => removeAlumnus(alum._id)}
+                  className="p-2.5 text-slate-200 hover:text-red-500 transition-all bg-slate-50/50 hover:bg-red-50 rounded-xl"
+                  title="Remove Alumni"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
             )}
 
             <div className="p-8 flex items-start gap-6">
@@ -146,7 +202,7 @@ const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6">
           <div className="bg-white rounded-[2.5rem] max-w-lg w-full p-10 relative shadow-2xl animate-in zoom-in-95 duration-300 border border-emerald-50">
             <button 
-              onClick={() => setIsModalOpen(false)} 
+              onClick={closeModal} 
               className="absolute top-8 right-8 p-2.5 text-slate-400 hover:text-slate-900 bg-slate-50 rounded-full transition-colors"
             >
               <X size={20} />
@@ -156,8 +212,12 @@ const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }
               <div className="w-14 h-14 emerald-gradient rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg mx-auto">
                 <GraduationCap size={28} />
               </div>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Enroll Alumnus</h3>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Archiving the legacy of AceLawn</p>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight">
+                {isEditMode ? 'Update Alumnus' : 'Enroll Alumnus'}
+              </h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                {isEditMode ? 'Revise alumni records' : 'Archiving the legacy of AceLawn'}
+              </p>
             </div>
 
             <form onSubmit={handleAdd} className="space-y-6">
@@ -235,9 +295,11 @@ const AlumniManager: React.FC<AlumniManagerProps> = ({ user, alumni, setAlumni }
 
               <button 
                 type="submit"
-                className="w-full py-5 emerald-gradient text-white rounded-[1.25rem] font-black text-sm uppercase tracking-widest shadow-xl hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                disabled={isSaving}
+                className="w-full py-5 emerald-gradient text-white rounded-[1.25rem] font-black text-sm uppercase tracking-widest shadow-xl hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-60"
               >
-                <Send size={18} /> Save Alumnus Record
+                {isSaving && <Loader size={18} className="animate-spin" />}
+                <Send size={18} /> {isEditMode ? 'Update Record' : 'Save Alumnus Record'}
               </button>
             </form>
           </div>

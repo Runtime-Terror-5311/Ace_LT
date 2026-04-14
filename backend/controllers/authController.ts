@@ -12,8 +12,10 @@ export const login = async (req: any, res: any) => {
       return res.status(400).json({ message: 'Email, registration number, and password are required.' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase(), regNo });
-    if (!user) {
+const user = await User.findOne({
+  email: email.toLowerCase(),
+  regNo: String(regNo).toUpperCase()
+});    if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -110,8 +112,8 @@ export const forgotPassword = async (req: any, res: any) => {
 
     const user = await User.findOne({ email: email.toLowerCase(), regNo });
     if (!user) {
-      return res.status(404).json({ message: 'User not found with these details.' });
-    }
+  return res.json({ message: 'If details are correct, OTP sent.' });
+}
 
     // Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -135,7 +137,11 @@ export const forgotPassword = async (req: any, res: any) => {
       `
     };
 
-    await transporter.sendMail(mailOptions);
+    await sendEmail({
+      to: email,
+      subject: (mailOptions as any).subject,
+      html: (mailOptions as any).html
+    });
     res.json({ message: 'OTP sent to your email. Please verify to reset password.' });
   } catch (err) {
     console.error('Forgot password error:', err);

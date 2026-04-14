@@ -124,7 +124,7 @@ export interface Announcement {
 }
 
 export interface Achievement {
-  id: string;
+  _id: string;
   title: string;
   description: string;
   imageUrl: string;
@@ -132,7 +132,7 @@ export interface Achievement {
 }
 
 export interface Alumni {
-  id: string;
+  _id: string;
   name: string;
   regNo: string;
   contact: string;

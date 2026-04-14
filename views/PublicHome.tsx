@@ -186,7 +186,7 @@ const PublicHome: React.FC<PublicHomeProps> = ({ achievements: initialAchievemen
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {achievements.map((ach) => (
-                <div key={ach.id} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm group hover:shadow-md transition-all">
+                <div key={ach._id} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm group hover:shadow-md transition-all">
                   <div className="h-48 relative overflow-hidden">
                     <img src={ach.imageUrl || '/avatar.png'} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-700" alt={ach.title} />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
@@ -214,7 +214,7 @@ const PublicHome: React.FC<PublicHomeProps> = ({ achievements: initialAchievemen
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {alumni.map((member) => (
-              <div key={member.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group flex items-center gap-6">
+              <div key={member._id} className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group flex items-center gap-6">
                  <div className="w-28 h-28 rounded-3xl overflow-hidden border-4 border-emerald-50 shrink-0 shadow-inner">
                     {/* Updated to use DB imageUrl with local fallback */}
                     <img src={member.imageUrl || '/avatar.png'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={member.name} />

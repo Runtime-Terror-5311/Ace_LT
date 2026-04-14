@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Trophy, Plus, Trash2, Camera, Calendar, FileText, Send, X, ShieldCheck, Loader } from 'lucide-react';
+import { Trophy, Plus, Trash2, Edit, Calendar, FileText, Send, X, ShieldCheck, Loader } from 'lucide-react';
 import { User, Achievement } from '@/types';
 import ImageUpload from '@/components/ImageUpload';
 
@@ -12,6 +12,8 @@ interface AchievementsManagerProps {
 
 const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achievements, setAchievements }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [newAch, setNewAch] = useState({
     title: '',
@@ -20,6 +22,25 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
     date: new Date().toISOString().split('T')[0]
   });
 
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setIsEditMode(false);
+    setEditingId(null);
+    setNewAch({ title: '', description: '', imageUrl: '', date: new Date().toISOString().split('T')[0] });
+  };
+
+  const openEditModal = (achievement: Achievement) => {
+    setEditingId(achievement._id);
+    setIsEditMode(true);
+    setNewAch({
+      title: achievement.title,
+      description: achievement.description,
+      imageUrl: achievement.imageUrl,
+      date: achievement.date
+    });
+    setIsModalOpen(true);
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAch.title || !newAch.imageUrl) return;
@@ -27,8 +48,11 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
     setIsSaving(true);
     try {
       const token = localStorage.getItem('ace_token');
-      const response = await fetch('/api/achievements', {
-        method: 'POST',
+      const url = isEditMode && editingId ? `/api/achievements/${editingId}` : '/api/achievements';
+      const method = isEditMode && editingId ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -41,17 +65,21 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
         })
       });
 
-      if (response.ok) {
-        const savedAch = await response.json();
-        setAchievements(prev => [savedAch, ...prev]);
-        setIsModalOpen(false);
-        setNewAch({ title: '', description: '', imageUrl: '', date: new Date().toISOString().split('T')[0] });
-      } else {
-        alert('Failed to save achievement');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to ${isEditMode ? 'update' : 'save'} achievement`);
       }
+
+      const savedAch = await response.json();
+      if (isEditMode && editingId) {
+        setAchievements(prev => prev.map(a => a._id === editingId ? savedAch : a));
+      } else {
+        setAchievements(prev => [savedAch, ...prev]);
+      }
+      closeModal();
     } catch (err) {
       console.error('Error saving achievement:', err);
-      alert('Error saving achievement');
+      alert(err instanceof Error ? err.message : 'Error saving achievement');
     } finally {
       setIsSaving(false);
     }
@@ -64,18 +92,20 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
         const response = await fetch(`/api/achievements/${id}`, {
           method: 'DELETE',
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
           }
         });
 
-        if (response.ok) {
-          setAchievements(prev => prev.filter(a => a.id !== id));
-        } else {
-          alert('Failed to delete achievement');
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to delete achievement');
         }
+
+        setAchievements(prev => prev.filter(a => a._id !== id));
       } catch (err) {
         console.error('Error deleting achievement:', err);
-        alert('Error deleting achievement');
+        alert(err instanceof Error ? err.message : 'Error deleting achievement');
       }
     }
   };
@@ -88,7 +118,12 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
           <p className="text-slate-500 text-sm font-medium">Curate the winning moments shown on the public portal.</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setIsEditMode(false);
+            setEditingId(null);
+            setNewAch({ title: '', description: '', imageUrl: '', date: new Date().toISOString().split('T')[0] });
+            setIsModalOpen(true);
+          }}
           className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase shadow-lg hover:bg-emerald-700 flex items-center gap-2 transition-all active:scale-95"
         >
           <Plus size={14} /> New Achievement
@@ -97,16 +132,25 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {achievements.map((ach) => (
-          <div key={ach.id} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm group hover:shadow-md transition-all">
+          <div key={ach._id} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm group hover:shadow-md transition-all">
             <div className="h-48 relative overflow-hidden">
                <img src={ach.imageUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-700" alt={ach.title} />
                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
-               <button 
-                 onClick={() => removeAchievement(ach.id)}
-                 className="absolute top-4 right-4 p-2 bg-white/20 backdrop-blur-md text-white rounded-lg hover:bg-red-500 transition-all opacity-0 group-hover:opacity-100"
-               >
-                 <Trash2 size={16} />
-               </button>
+               <div className="absolute top-4 right-4 flex items-center gap-2">
+                 <button 
+                   onClick={() => openEditModal(ach)}
+                   className="p-2 bg-white/20 backdrop-blur-md text-white rounded-lg hover:bg-emerald-500 transition-all opacity-0 group-hover:opacity-100"
+                   title="Edit Achievement"
+                 >
+                   <Edit size={16} />
+                 </button>
+                 <button 
+                   onClick={() => removeAchievement(ach._id)}
+                   className="p-2 bg-white/20 backdrop-blur-md text-white rounded-lg hover:bg-red-500 transition-all opacity-0 group-hover:opacity-100"
+                 >
+                   <Trash2 size={16} />
+                 </button>
+               </div>
                <div className="absolute bottom-4 left-6">
                   <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">{new Date(ach.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</span>
                </div>
@@ -129,7 +173,7 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6">
           <div className="bg-white rounded-[2.5rem] max-w-lg w-full p-10 relative shadow-2xl animate-in zoom-in-95 duration-300 border border-emerald-50">
             <button 
-              onClick={() => setIsModalOpen(false)} 
+              onClick={closeModal} 
               className="absolute top-8 right-8 p-2.5 text-slate-400 hover:text-slate-900 bg-slate-50 rounded-full transition-colors"
             >
               <X size={20} />
@@ -139,8 +183,12 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
               <div className="w-12 h-12 emerald-gradient rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg">
                 <Trophy size={24} />
               </div>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Record Victory</h3>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Updates public home screen slideshow</p>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight">
+                {isEditMode ? 'Update Achievement' : 'Record Victory'}
+              </h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                {isEditMode ? 'Revise achievement details' : 'Updates public home screen slideshow'}
+              </p>
             </div>
 
             <form onSubmit={handleAdd} className="space-y-6">
@@ -212,11 +260,11 @@ const AchievementsManager: React.FC<AchievementsManagerProps> = ({ user, achieve
               >
                 {isSaving ? (
                   <>
-                    <Loader size={18} className="animate-spin" /> Saving...
+                    <Loader size={18} className="animate-spin" /> {isEditMode ? 'Updating...' : 'Saving...'}
                   </>
                 ) : (
                   <>
-                    <Send size={18} /> Publish to Home Screen
+                    <Send size={18} /> {isEditMode ? 'Update Achievement' : 'Publish to Home Screen'}
                   </>
                 )}
               </button>

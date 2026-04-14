@@ -19,16 +19,17 @@ export const createAchievement = async (req: any, res: any) => {
     if (role !== 'admin' && role !== 'captain' && role !== 'viceCaptain') {
       return res.status(403).json({ message: 'Not authorized to add achievements' });
     }
-const { title, description, date } = req.body;
+const { title, description, date, imageUrl } = req.body;
 
-if (!title || !date) {
+if (!title || !date || !imageUrl) {
   return res.status(400).json({ message: 'Missing required fields' });
 }
 
 const achievement = new Achievement({
   title,
   description,
-  date
+  date,
+  imageUrl
 });    const saved = await achievement.save();
     res.status(201).json(saved);
   } catch (err) {
@@ -54,5 +55,39 @@ if (!deleted) {
 res.json({ success: true });
   } catch (err) {
     res.status(500).json({ message: 'Failed to delete achievement' });
+  }
+};
+
+export const updateAchievement = async (req: any, res: any) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    
+    const { role } = req.user;
+    if (role !== 'admin' && role !== 'captain' && role !== 'viceCaptain') {
+      return res.status(403).json({ message: 'Not authorized to update achievements' });
+    }
+
+    const { id } = req.params;
+    const { title, description, date, imageUrl } = req.body;
+
+    if (!title || !date || !imageUrl) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const updated = await Achievement.findByIdAndUpdate(
+      id,
+      { title, description, date, imageUrl },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Achievement not found' });
+    }
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update achievement' });
   }
 };
