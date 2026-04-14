@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import fs from 'fs';
 import { connectDB } from './config/db';
 import authRoutes from './routes/authRoutes';
 import { getMatches, createMatch, deleteAllMatches } from './controllers/matchController';
@@ -23,10 +24,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
-  console.log('Starting server initialization...');
+  // Detect production environment (e.g., Render)
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+  
+  console.log('--- Server Startup ---');
+  console.log(`Environment: ${isProduction ? 'Production' : 'Development'}`);
+  console.log(`Node Version: ${process.version}`);
   
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = process.env.PORT || 10000;
+  
+  if (!process.env.JWT_SECRET && isProduction) {
+    console.warn('WARNING: JWT_SECRET is not set. Auth features will be insecure!');
+  }
 
   // Health check
   app.get('/api/health', (req, res) => {
@@ -56,7 +66,8 @@ async function startServer() {
   app.use('/api/uploads', uploadRoutes);
 
   // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
+  if (!isProduction) {
+    console.log('Loading Vite development middleware...');
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       configFile: path.join(process.cwd(), 'vite.config.ts'),
@@ -73,12 +84,22 @@ async function startServer() {
       root: path.join(process.cwd(), 'frontend')
     });
     app.use(vite.middlewares);
+    console.log('Vite middleware loaded.');
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    console.log(`Serving static files from: ${distPath}`);
+    
+    // Check if dist directory exists
+    if (!fs.existsSync(distPath)) {
+      console.error(`FATAL: Build output directory not found at ${distPath}. Did the build fail?`);
+      process.exit(1);
+    }
+    
     app.use(express.static(distPath) );
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+    console.log('Static file serving initialized.');
   }
 
   app.use((err: any, req: any, res: any, next: any) => {
