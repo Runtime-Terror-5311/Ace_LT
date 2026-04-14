@@ -13,14 +13,22 @@ const PlayerStatsView: React.FC<PlayerStatsProps> = ({ user, members }) => {
   const [matchHistory, setMatchHistory] = useState<Match[]>([]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('ace_match_history');
-    if (saved) {
+    const fetchMatches = async () => {
       try {
-        setMatchHistory(JSON.parse(saved));
-      } catch {
-        setMatchHistory([]);
+        const token = localStorage.getItem('ace_token');
+        const res = await fetch('/api/matches', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setMatchHistory(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch match history:', err);
       }
-    }
+    };
+
+    fetchMatches();
   }, []);
 
   const statsData = useMemo(() => {
@@ -37,7 +45,6 @@ const PlayerStatsView: React.FC<PlayerStatsProps> = ({ user, members }) => {
     }>();
 
     members
-      .filter((m) => m.role !== UserRole.ADMIN)
       .forEach((member) => {
         map.set(member.name, {
           name: member.name,
@@ -53,24 +60,37 @@ const PlayerStatsView: React.FC<PlayerStatsProps> = ({ user, members }) => {
       });
 
     matchHistory.forEach((match) => {
-      const player1 = map.get(match.player1Name);
-      const player2 = map.get(match.player2Name);
-      if (player1) {
-        player1.played += 1;
-        if (match.winner === player1.name) {
-          player1.win += 1;
-        } else {
-          player1.loss += 1;
+      // Convert scores to numbers
+      const s1 = parseInt(match.score1 || '0');
+      const s2 = parseInt(match.score2 || '0');
+      const team1Won = s1 > s2;
+      const team2Won = s2 > s1;
+
+      // Players on Team 1
+      const p1a = map.get(match.player1Name);
+      const p1b = match.player1bName ? map.get(match.player1bName) : null;
+
+      // Players on Team 2
+      const p2a = map.get(match.player2Name);
+      const p2b = match.player2bName ? map.get(match.player2bName) : null;
+
+      // Update Team 1 Stats
+      [p1a, p1b].forEach(p => {
+        if (p) {
+          p.played += 1;
+          if (team1Won) p.win += 1;
+          else if (team2Won) p.loss += 1;
         }
-      }
-      if (player2) {
-        player2.played += 1;
-        if (match.winner === player2.name) {
-          player2.win += 1;
-        } else {
-          player2.loss += 1;
+      });
+
+      // Update Team 2 Stats
+      [p2a, p2b].forEach(p => {
+        if (p) {
+          p.played += 1;
+          if (team2Won) p.win += 1;
+          else if (team1Won) p.loss += 1;
         }
-      }
+      });
     });
 
     const stats = Array.from(map.values()).map((stat) => ({

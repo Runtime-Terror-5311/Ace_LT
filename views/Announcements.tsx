@@ -15,7 +15,7 @@ const AnnouncementsView: React.FC<{ user: User }> = ({ user }) => {
     urgent: false
   });
 
-  const isAdmin = user.role === UserRole.ADMIN;
+  const isLeadership = user.role === UserRole.ADMIN || user.role === UserRole.CAPTAIN || user.role === UserRole.VICE_CAPTAIN;
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('ace_token');
@@ -98,7 +98,7 @@ const AnnouncementsView: React.FC<{ user: User }> = ({ user }) => {
           <h2 className="text-2xl font-bold text-slate-900 uppercase tracking-tight">Team Board</h2>
           <p className="text-slate-500 text-sm font-medium">Official updates and urgent team notifications.</p>
         </div>
-        {isAdmin && (
+        {isLeadership && (
           <button 
             onClick={() => setIsModalOpen(true)}
             className="bg-emerald-600 text-white px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 active:scale-95"

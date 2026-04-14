@@ -11,8 +11,9 @@ export const getEvents = async (req: any, res: any) => {
 
 export const createEvent = async (req: any, res: any) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ message: 'Only admin can create events.' });
+    const allowedLeadership = ['admin', 'captain', 'viceCaptain'];
+    if (!allowedLeadership.includes(req.user?.role)) {
+      return res.status(403).json({ message: 'Only leadership can create events.' });
     }
 
     const { event, dateString, time, court, dayOfMonth, month, year } = req.body;
@@ -40,8 +41,9 @@ export const createEvent = async (req: any, res: any) => {
 
 export const deleteEvent = async (req: any, res: any) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ message: 'Only admin can delete events.' });
+    const allowedLeadership = ['admin', 'captain', 'viceCaptain'];
+    if (!allowedLeadership.includes(req.user?.role)) {
+      return res.status(403).json({ message: 'Only leadership can delete events.' });
     }
     
     await CalendarEvent.findByIdAndDelete(req.params.id);

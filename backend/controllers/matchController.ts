@@ -10,15 +10,26 @@ export const getMatches = async (req: any, res: any) => {
 };
 
 export const createMatch = async (req: any, res: any) => {
-  const userRole = (req as any).user.role;
-  if (userRole !== 'captain' && userRole !== 'admin' && userRole !== 'viceCaptain') {
-    return res.status(403).json({ message: 'Unauthorized to create matches' });
-  }
+  // Any authenticated user can record a match
 
   try {
     const newMatch = await Match.create(req.body);
     res.status(201).json(newMatch);
   } catch (err) {
     res.status(400).json({ message: 'Error creating match' });
+  }
+};
+
+export const deleteAllMatches = async (req: any, res: any) => {
+  // Only admins can delete matches
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ message: 'Only administrators can reset the leaderboard.' });
+  }
+
+  try {
+    await Match.deleteMany({});
+    res.json({ message: 'Leaderboard reset successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error resetting leaderboard' });
   }
 };

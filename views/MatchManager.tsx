@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Swords, Trophy, History, Coins, RotateCcw, Zap, Activity, Calendar, Play, Settings2, Search, CheckCircle, FileDown, LayoutList, Undo2 } from 'lucide-react';
 import { User, UserRole, MatchType, Match, GameScore, MatchCategory } from '@/types';
 
-const TENNIS_POINTS = ['0', '15', '30', '40', 'AD'];
+const TENNIS_POINTS = ['Love', '15', '30', '40', 'AD'];
 
 const SearchableSelect: React.FC<{
   label: string;
@@ -77,6 +77,8 @@ interface MatchState {
   currentServer: string;
   isMatchOver: boolean;
   isTieBreak: boolean;
+  isSuperTieBreak: boolean;
+  pointsInGame: number;
 }
 
 const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members }) => {
@@ -84,23 +86,31 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
   const [isMatchStarted, setIsMatchStarted] = useState(false);
   const [isMatchOver, setIsMatchOver] = useState(false);
   const [isTieBreak, setIsTieBreak] = useState(false);
+  const [isSuperTieBreak, setIsSuperTieBreak] = useState(false);
   const [showTieBreakPrompt, setShowTieBreakPrompt] = useState(false);
-  const [tieBreakBestOf, setTieBreakBestOf] = useState(11);
+  const [tieBreakBestOf, setTieBreakBestOf] = useState(7);
   const [selectedMatchForSheet, setSelectedMatchForSheet] = useState<Match | null>(null);
 
-  const [matchHistory, setMatchHistory] = useState<Match[]>(() => {
-    const saved = localStorage.getItem('ace_match_history');
-    if (!saved) return [];
+  const [matchHistory, setMatchHistory] = useState<Match[]>([]);
+
+  const fetchMatchHistory = async () => {
     try {
-      return JSON.parse(saved) as Match[];
-    } catch {
-      return [];
+      const token = localStorage.getItem('ace_token');
+      const res = await fetch('/api/matches', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMatchHistory(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch match history:', err);
     }
-  });
+  };
 
   useEffect(() => {
-    localStorage.setItem('ace_match_history', JSON.stringify(matchHistory));
-  }, [matchHistory]);
+    fetchMatchHistory();
+  }, []);
 
   const eligiblePlayers = useMemo(
     () => members.filter((member) => member.isInducted),
@@ -114,19 +124,13 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
     p2bName: '',
     type: MatchType.RANDOM,
     category: MatchCategory.SINGLES,
-    bestOf: 11,
-    gamesToWin: 6,
-    setsToWin: 1,
+    sets: 3, // Total Sets (Best of)
+    games: 6, // Games to win a set
+    useSuperTieBreak: true, // Play super tie-break instead of final set
+    isNormalMatch: false, // New field for simple scoring
     date: new Date().toISOString().slice(0, 10),
     court: 'Court 1',
   });
-
-  useEffect(() => {
-    const target = Math.floor(config.bestOf / 2) + 1;
-    if (config.gamesToWin !== target) {
-      setConfig(prev => ({ ...prev, gamesToWin: target }));
-    }
-  }, [config.bestOf]);
 
   useEffect(() => {
     if (eligiblePlayers.length === 0) return;
@@ -207,6 +211,7 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
     setIsMatchStarted(true);
     setIsMatchOver(false);
     setIsTieBreak(false);
+    setIsSuperTieBreak(false);
     setShowTieBreakPrompt(false);
     setScore({ p1: 0, p2: 0, games1: 0, games2: 0, sets1: 0, sets2: 0 });
     setSetScores([]);
@@ -214,15 +219,44 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
     setHistoryStack([]);
   };
 
+  const getPointsInGame = () => score.p1 + score.p2;
+
+  const updateServerInTieBreak = () => {
+    const total = score.p1 + score.p2;
+    // Tie-break serving pattern: A (1 serve), B (2), A (2), B (2)...
+    // Total points: 0->A serves, 1->B, 2->B, 3->A, 4->A, 5->B, 6->B...
+    // Pattern: 0 (A), 1-2 (B), 3-4 (A), 5-6 (B)...
+    // Sequence index: total
+    if (total === 0) {
+      // First point handled by currentServer already (toss winner/choice)
+      return;
+    }
+    
+    // Every 2 points after the first point, server switches
+    const sequenceIndex = Math.floor((total + 1) / 2);
+    const serverIsTeam1 = sequenceIndex % 2 === 0;
+    
+    const initialServerTeam1 = tossResult?.choice === 'serve' 
+      ? tossResult.winner === team1Name 
+      : tossResult?.winner !== team1Name;
+
+    if (serverIsTeam1 === initialServerTeam1) {
+      setCurrentServer(team1Name);
+    } else {
+      setCurrentServer(team2Name);
+    }
+  };
+
   const undoMove = () => {
     if (historyStack.length === 0) return;
-    const lastState = historyStack[historyStack.length - 1];
-    setScore(lastState.score);
-    setSetScores(lastState.setScores);
-    setGameHistory(lastState.gameHistory);
-    setCurrentServer(lastState.currentServer);
-    setIsMatchOver(lastState.isMatchOver);
-    setIsTieBreak(lastState.isTieBreak);
+    const lastSubState = historyStack[historyStack.length - 1];
+    setScore(lastSubState.score);
+    setSetScores(lastSubState.setScores);
+    setGameHistory(lastSubState.gameHistory);
+    setCurrentServer(lastSubState.currentServer);
+    setIsMatchOver(lastSubState.isMatchOver);
+    setIsTieBreak(lastSubState.isTieBreak);
+    setIsSuperTieBreak(lastSubState.isSuperTieBreak);
     setHistoryStack(prev => prev.slice(0, -1));
   };
 
@@ -235,40 +269,84 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
       gameHistory: [...gameHistory],
       currentServer,
       isMatchOver,
-      isTieBreak
+      isTieBreak,
+      isSuperTieBreak,
+      pointsInGame: score.p1 + score.p2
     };
     setHistoryStack(prev => [...prev, snapshot]);
 
     const opp = player === 'p1' ? 'p2' : 'p1';
     let newScore = { ...score };
+    let newIsTieBreak = isTieBreak;
+    let newIsSuperTieBreak = isSuperTieBreak;
 
-    if (isTieBreak) {
+    if (isTieBreak || isSuperTieBreak) {
+      // Tie-break logic (Normal numbers: 1, 2, 3...)
       newScore[player]++;
-      const p1P = newScore.p1;
-      const p2P = newScore.p2;
-      const targetP = Math.floor(tieBreakBestOf / 2) + 1;
+      
+      const target = isSuperTieBreak ? 10 : 7;
+      if (newScore[player] >= target && newScore[player] - newScore[opp] >= 2) {
+        // Tie-break won
+        const setWinner = score.p1 + (player === 'p1' ? 1 : 0) > score.p2 + (player === 'p2' ? 1 : 0) ? '1' : '2';
+        
+        if (isSuperTieBreak) {
+           newScore.sets1 += setWinner === '1' ? 1 : 0;
+           newScore.sets2 += setWinner === '2' ? 1 : 0;
+           setSetScores(prev => [...prev, `[STB] ${newScore.p1}-${newScore.p2}`]);
+           setIsMatchOver(true);
+        } else {
+           newScore[`sets${setWinner}` as 'sets1' | 'sets2']++;
+           // A tie-break result in a set makes it 7-6
+           const p1G = setWinner === '1' ? 7 : 6;
+           const p2G = setWinner === '2' ? 7 : 6;
+           setSetScores(prev => [...prev, `${p1G}-${p2G}`]);
+           
+           newScore.games1 = 0;
+           newScore.games2 = 0;
+           newScore.p1 = 0;
+           newScore.p2 = 0;
+           setIsTieBreak(false);
+           newIsTieBreak = false;
 
-      if (p1P >= targetP || p2P >= targetP) {
-        if (Math.abs(p1P - p2P) >= 2 || (p1P === targetP && p2P < targetP - 1) || (p2P === targetP && p1P < targetP - 1)) {
-          // Tie break over
-          const winnerIndex = p1P > p2P ? '1' : '2';
-          newScore[`sets${winnerIndex}` as 'sets1' | 'sets2']++;
-          setSetScores(prev => [...prev, `TB ${p1P}-${p2P}`]);
-          setIsMatchOver(true);
+           // Check if match over
+           const targetS = Math.floor(config.sets / 2) + 1;
+           if (newScore.sets1 >= targetS || newScore.sets2 >= targetS) {
+             setIsMatchOver(true);
+           } else {
+             // Check if next set should be Super Tie-Break
+             if (config.useSuperTieBreak && (newScore.sets1 + newScore.sets2 === config.sets - 1)) {
+                setIsSuperTieBreak(true);
+                newIsSuperTieBreak = true;
+             }
+           }
+        }
+      } else {
+        // Update server in tie-break
+        const total = newScore.p1 + newScore.p2;
+        const sequenceIndex = Math.floor((total + 1) / 2);
+        const serverIsTeam1 = sequenceIndex % 2 === 0;
+        const initialServerTeam1 = tossResult?.choice === 'serve' 
+          ? tossResult.winner === team1Name 
+          : tossResult?.winner !== team1Name;
+
+        if (serverIsTeam1 === initialServerTeam1) {
+          setCurrentServer(team1Name);
+        } else {
+          setCurrentServer(team2Name);
         }
       }
     } else {
-      // Normal Tennis Points
+      // Normal Tennis Points: Love, 15, 30, 40, AD
       if (newScore[player] === 3 && newScore[opp] === 3) {
         newScore[player] = 4; // AD
       } else if (newScore[opp] === 4) {
         newScore[opp] = 3; // Deuce
-      } else if (newScore[player] >= 3) {
+      } else if (newScore[player] >= 3 && (newScore[player] > newScore[opp] || newScore[player] === 4)) {
         // Game Won
-        const gameOutcome = `${TENNIS_POINTS[newScore.p1]}-${TENNIS_POINTS[newScore.p2]}`;
+        const gameOutcome = `${newScore.p1 === 4 ? 'AD' : TENNIS_POINTS[newScore.p1]}-${newScore.p2 === 4 ? 'AD' : TENNIS_POINTS[newScore.p2]}`;
         setGameHistory(prev => [...prev, {
           gameNumber: prev.length + 1,
-          serverInitials: currentServer,
+          serverInitials: currentServer === team1Name ? 'A' : 'B',
           score: gameOutcome
         }]);
 
@@ -277,18 +355,45 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
         newScore.p2 = 0;
         newScore[player === 'p1' ? 'games1' : 'games2']++;
 
+        // Set Win Condition
         const p1G = newScore.games1;
         const p2G = newScore.games2;
-        const targetG = config.gamesToWin;
+        const winGames = config.games;
 
-        if (p1G === targetG - 1 && p2G === targetG - 1) {
-          setShowTieBreakPrompt(true);
-        } else if (p1G >= targetG || p2G >= targetG) {
-          // Check if match is over (Normal mode)
-          if (Math.abs(p1G - p2G) >= 2 || (p1G === targetG && p2G < targetG - 1) || (p2G === targetG && p1G < targetG - 1)) {
-            newScore[p1G > p2G ? 'sets1' : 'sets2']++;
+        if (config.isNormalMatch) {
+          // Normal Match: First to target games wins immediately (no win-by-2, no tie-break)
+          if (p1G >= winGames || p2G >= winGames) {
+            const setWinner = p1G > p2G ? '1' : '2';
+            newScore[`sets${setWinner}` as 'sets1' | 'sets2']++;
             setSetScores(prev => [...prev, `${p1G}-${p2G}`]);
-            setIsMatchOver(true);
+            newScore.games1 = 0;
+            newScore.games2 = 0;
+
+            const targetS = Math.floor(config.sets / 2) + 1;
+            if (newScore.sets1 >= targetS || newScore.sets2 >= targetS) {
+              setIsMatchOver(true);
+            }
+          }
+        } else {
+          // Standard Rules: at least 6 games AND 2-game lead (or 7-5, 7-6)
+          if ((p1G >= winGames || p2G >= winGames) && Math.abs(p1G - p2G) >= 2) {
+            const setWinner = p1G > p2G ? '1' : '2';
+            newScore[`sets${setWinner}` as 'sets1' | 'sets2']++;
+            setSetScores(prev => [...prev, `${p1G}-${p2G}`]);
+            newScore.games1 = 0;
+            newScore.games2 = 0;
+
+            const targetS = Math.floor(config.sets / 2) + 1;
+            if (newScore.sets1 >= targetS || newScore.sets2 >= targetS) {
+              setIsMatchOver(true);
+            } else if (config.useSuperTieBreak && (newScore.sets1 + newScore.sets2 === config.sets - 1)) {
+              setIsSuperTieBreak(true);
+              newIsSuperTieBreak = true;
+            }
+          } else if (p1G === winGames && p2G === winGames) {
+            // Tie-break trigger at 6-6
+            setIsTieBreak(true);
+            newIsTieBreak = true;
           }
         }
       } else {
@@ -298,21 +403,28 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
     setScore(newScore);
   };
 
-  const saveAndSyncStats = () => {
+  const saveAndSyncStats = async () => {
     const isTeam1Winner = score.sets1 > score.sets2;
     const winnerName = isTeam1Winner ? team1Name : team2Name;
-    const winnerId = isTeam1Winner ? selectedPlayer1?.id : selectedPlayer2?.id;
+    
+    // Resolve IDs properly (checking both _id and id)
+    const p1Id = (selectedPlayer1 as any)?._id || (selectedPlayer1 as any)?.id || '';
+    const p1bId = (selectedPlayer1b as any)?._id || (selectedPlayer1b as any)?.id;
+    const p2Id = (selectedPlayer2 as any)?._id || (selectedPlayer2 as any)?.id || '';
+    const p2bId = (selectedPlayer2b as any)?._id || (selectedPlayer2b as any)?.id;
+    
+    const winnerId = isTeam1Winner ? p1Id : p2Id;
     
     const newHistoryItem: Match = {
       id: `h${Date.now()}`,
       category: config.category,
-      player1Id: selectedPlayer1?.id || '',
+      player1Id: p1Id,
       player1Name: config.p1Name,
-      player1bId: selectedPlayer1b?.id,
+      player1bId: p1bId,
       player1bName: config.p1bName,
-      player2Id: selectedPlayer2?.id || '',
+      player2Id: p2Id,
       player2Name: config.p2Name,
-      player2bId: selectedPlayer2b?.id,
+      player2bId: p2bId,
       player2bName: config.p2bName,
       score1: String(score.sets1),
       score2: String(score.sets2),
@@ -320,16 +432,38 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
       winner: winnerName,
       type: config.type,
       court: config.court,
+      isNormalMatch: config.isNormalMatch,
       gameHistory: [...gameHistory],
       scheduledAt: config.date,
       completed: true,
       createdAt: new Date().toISOString(),
     };
 
-    setMatchHistory(prev => [newHistoryItem, ...prev]);
-    setIsMatchStarted(false);
-    setIsMatchOver(false);
-    setActiveTab('history');
+    try {
+      const token = localStorage.getItem('ace_token');
+      const res = await fetch('/api/matches', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(newHistoryItem)
+      });
+      
+      if (res.ok) {
+        const savedMatch = await res.json();
+        setMatchHistory(prev => [savedMatch, ...prev]);
+        setIsMatchStarted(false);
+        setIsMatchOver(false);
+        setActiveTab('history');
+      } else {
+        const data = await res.json();
+        alert(`Failed to save match: ${data.message}`);
+      }
+    } catch (err) {
+      console.error('Save match error:', err);
+      alert('Network error while saving match. Please check your connection.');
+    }
   };
 
   const downloadPDF = () => {
@@ -411,6 +545,25 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
                   <h3 className="text-xl font-bold text-slate-900">Pre-Match Configuration</h3>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Official Tournament Setup</p>
                 </div>
+              </div>
+
+              {/* Normal Match Mode Toggle */}
+              <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between group hover:border-emerald-200 transition-all">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${config.isNormalMatch ? 'bg-emerald-600 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>
+                    <Zap size={24} fill={config.isNormalMatch ? "currentColor" : "none"} />
+                  </div>
+                  <div>
+                    <p className="font-black text-slate-900 uppercase tracking-tight">Normal Match Mode</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Simple scoring (No Tie-breaks, 6-5 wins set)</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setConfig({...config, isNormalMatch: !config.isNormalMatch})}
+                  className={`w-14 h-7 rounded-full transition-all relative ${config.isNormalMatch ? 'bg-emerald-600' : 'bg-slate-300'}`}
+                >
+                  <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all shadow-md ${config.isNormalMatch ? 'left-8' : 'left-1'}`} />
+                </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-12 gap-y-6">
@@ -537,15 +690,44 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
                       <option value="Other">Other</option>
                     </select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Games / Set</label>
-                      <input type="number" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-6 text-slate-900 font-bold outline-none" value={config.gamesToWin} onChange={(e) => setConfig({...config, gamesToWin: parseInt(e.target.value) || 5})} />
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Final Set Match TB</label>
+                      <button 
+                        onClick={() => setConfig({...config, useSuperTieBreak: !config.useSuperTieBreak})}
+                        className={`w-12 h-6 rounded-full transition-all relative ${config.useSuperTieBreak ? 'bg-emerald-600' : 'bg-slate-300'}`}
+                      >
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${config.useSuperTieBreak ? 'left-7' : 'left-1'}`} />
+                      </button>
                     </div>
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Best of Sets</label>
-                       <input type="number" className="w-full bg-slate-50 border border-slate-100 rounded-xl py-4 px-6 text-slate-900 font-bold outline-none" value={config.bestOf} onChange={(e) => setConfig({...config, bestOf: parseInt(e.target.value) || 11})} />
-                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Sets (Best of)</label>
+                        <input 
+                          type="text" 
+                          className="w-full bg-white border border-slate-100 rounded-xl py-3 px-4 text-slate-900 font-bold outline-none" 
+                          value={config.sets} 
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            setConfig({...config, sets: val === '' ? 0 : parseInt(val)});
+                          }} 
+                        />
+                        <p className="text-[8px] text-slate-400 font-bold">First to {Math.floor((config.sets || 0) / 2) + 1}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Games per Set</label>
+                        <input 
+                          type="text" 
+                          className="w-full bg-white border border-slate-100 rounded-xl py-3 px-4 text-slate-900 font-bold outline-none" 
+                          value={config.games} 
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            setConfig({...config, games: val === '' ? 0 : parseInt(val)});
+                          }} 
+                        />
+                        <p className="text-[8px] text-slate-400 font-bold">Tie-break at {config.games}-{config.games}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -607,83 +789,53 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
                      </div>
                   </div>
 
-                  {showTieBreakPrompt && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-                      <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100 text-center animate-in zoom-in-95">
-                        <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-6"><Zap size={32} /></div>
-                        <h3 className="text-2xl font-black text-slate-900 mb-2">Score is 5-5!</h3>
-                        <p className="text-slate-500 text-sm mb-8">How would you like to proceed with the final decider?</p>
-                        <div className="grid grid-cols-1 gap-6">
-                          <div className="space-y-3">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block text-left">Tie-Break Length (Best of X Points)</label>
-                            <div className="flex bg-slate-100 p-1 rounded-xl">
-                              {[7, 11, 15, 21].map(pts => (
-                                <button 
-                                  key={pts}
-                                  onClick={() => setTieBreakBestOf(pts)}
-                                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${tieBreakBestOf === pts ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                >
-                                  {pts}
-                                </button>
-                              ))}
-                              <div className="flex-1 px-1">
-                                <input 
-                                  type="number" 
-                                  placeholder="Custom"
-                                  className="w-full py-2 bg-transparent text-center text-xs font-bold outline-none text-emerald-700" 
-                                  value={tieBreakBestOf} 
-                                  onChange={(e) => setTieBreakBestOf(parseInt(e.target.value) || 1)} 
-                                />
-                              </div>
-                            </div>
-                            <p className="text-[10px] text-slate-400 text-left italic">Winner needs {Math.floor(tieBreakBestOf/2)+1} points.</p>
-                          </div>
+                    <div className="mb-6 flex flex-wrap gap-2 items-center">
+                       {setScores.map((ss, idx) => (
+                         <div key={idx} className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl text-xs font-black border border-emerald-100">
+                           SET {idx + 1}: {ss}
+                         </div>
+                       ))}
+                       {isSuperTieBreak && <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold uppercase self-center">Super Tie-Break</span>}
+                       
+                       {/* Side Change Notification */}
+                       {((!isTieBreak && !isSuperTieBreak && (score.games1 + score.games2) % 2 === 1) || 
+                         ((isTieBreak || isSuperTieBreak) && (score.p1 + score.p2) > 0 && (score.p1 + score.p2) % 6 === 0)) && (
+                         <div className="ml-auto px-4 py-2 bg-blue-50 text-blue-700 rounded-xl text-[10px] font-black uppercase tracking-widest border border-blue-100 animate-pulse flex items-center gap-2">
+                           <Zap size={12} className="fill-current" /> Change Ends
+                         </div>
+                       )}
+                    </div>
 
-                          <button 
-                            onClick={() => { setIsTieBreak(true); setShowTieBreakPrompt(false); setScore(prev => ({...prev, p1: 0, p2: 0})); }}
-                            className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg text-sm uppercase tracking-widest"
-                          >
-                            Play Tie-Break
-                          </button>
-                          <button 
-                            onClick={() => { setIsTieBreak(false); setShowTieBreakPrompt(false); }}
-                            className="w-full py-4 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all text-xs"
-                          >
-                            Continue Normal Rules (Advantage)
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 sm:gap-1 6 relative">
-                    <div className="text-center group">
-                      <p className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center justify-center gap-2">
-                        Side A {currentServer === team1Name && <span className="text-yellow-500">🎾</span>}
-                      </p>
-                      <h4 className="text-sm sm:text-lg font-bold text-slate-900 mb-4 sm:mb-6 min-h-[3rem] flex items-center justify-center px-4">{team1Name}</h4>
-                      <div className="text-8xl sm:text-[120px] font-black text-slate-900 leading-none mb-6 sm:mb-10 tabular-nums tracking-tighter group-hover:text-emerald-600 transition-colors">
-                        {isTieBreak ? score.p1 : TENNIS_POINTS[score.p1]}
-                      </div>
-                      <div className="flex justify-center gap-4 sm:gap-8 mb-6 sm:mb-10 text-[10px] font-black uppercase text-slate-400">
-                        <div className="bg-slate-50 px-3 sm:px-4 py-2 rounded-xl">Games: <span className="text-emerald-600">{score.games1}</span></div>
-                      </div>
-                      <button onClick={() => scorePoint('p1')} className="w-full py-5 bg-emerald-600 text-white rounded-[1.2rem] font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Point Team A</button>
-                    </div>
-                    <div className="text-center group">
-                      <p className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center justify-center gap-2">
-                        Side B {currentServer === team2Name && <span className="text-yellow-500">🎾</span>}
-                      </p>
-                      <h4 className="text-sm sm:text-lg font-bold text-slate-900 mb-4 sm:mb-6 min-h-[3rem] flex items-center justify-center px-4">{team2Name}</h4>
-                      <div className="text-8xl sm:text-[120px] font-black text-slate-900 leading-none mb-6 sm:mb-10 tabular-nums tracking-tighter group-hover:text-emerald-600 transition-colors">
-                        {isTieBreak ? score.p2 : TENNIS_POINTS[score.p2]}
-                      </div>
-                      <div className="flex justify-center gap-4 sm:gap-8 mb-6 sm:mb-10 text-[10px] font-black uppercase text-slate-400">
-                        <div className="bg-slate-50 px-3 sm:px-4 py-2 rounded-xl">Games: <span className="text-emerald-600">{score.games2}</span></div>
-                      </div>
-                      <button onClick={() => scorePoint('p2')} className="w-full py-5 bg-emerald-600 text-white rounded-[1.2rem] font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Point Team B</button>
-                    </div>
-                  </div>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 sm:gap-16 relative">
+                     <div className="text-center group">
+                       <p className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center justify-center gap-2">
+                         Side A {currentServer === team1Name && <span className="text-yellow-500">🎾</span>}
+                       </p>
+                       <h4 className="text-sm sm:text-lg font-bold text-slate-900 mb-4 sm:mb-6 min-h-[3rem] flex items-center justify-center px-4">{team1Name}</h4>
+                       <div className="text-8xl sm:text-[120px] font-black text-slate-900 leading-none mb-6 sm:mb-10 tabular-nums tracking-tighter group-hover:text-emerald-600 transition-colors">
+                         {isTieBreak || isSuperTieBreak ? score.p1 : (score.p1 === 4 ? 'AD' : TENNIS_POINTS[score.p1])}
+                       </div>
+                       <div className="flex justify-center gap-4 sm:gap-8 mb-6 sm:mb-10 text-[10px] font-black uppercase text-slate-400">
+                         <div className="bg-slate-50 px-3 sm:px-4 py-2 rounded-xl">Games: <span className="text-emerald-600">{score.games1}</span></div>
+                         <div className="bg-slate-50 px-3 sm:px-4 py-2 rounded-xl">Sets: <span className="text-emerald-600">{score.sets1}</span></div>
+                       </div>
+                       <button onClick={() => scorePoint('p1')} className="w-full py-5 bg-emerald-600 text-white rounded-[1.2rem] font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Point Team A</button>
+                     </div>
+                     <div className="text-center group">
+                       <p className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center justify-center gap-2">
+                         Side B {currentServer === team2Name && <span className="text-yellow-500">🎾</span>}
+                       </p>
+                       <h4 className="text-sm sm:text-lg font-bold text-slate-900 mb-4 sm:mb-6 min-h-[3rem] flex items-center justify-center px-4">{team2Name}</h4>
+                       <div className="text-8xl sm:text-[120px] font-black text-slate-900 leading-none mb-6 sm:mb-10 tabular-nums tracking-tighter group-hover:text-emerald-600 transition-colors">
+                         {isTieBreak || isSuperTieBreak ? score.p2 : (score.p2 === 4 ? 'AD' : TENNIS_POINTS[score.p2])}
+                       </div>
+                       <div className="flex justify-center gap-4 sm:gap-8 mb-6 sm:mb-10 text-[10px] font-black uppercase text-slate-400">
+                         <div className="bg-slate-50 px-3 sm:px-4 py-2 rounded-xl">Games: <span className="text-emerald-600">{score.games2}</span></div>
+                         <div className="bg-slate-50 px-3 sm:px-4 py-2 rounded-xl">Sets: <span className="text-emerald-600">{score.sets2}</span></div>
+                       </div>
+                       <button onClick={() => scorePoint('p2')} className="w-full py-5 bg-emerald-600 text-white rounded-[1.2rem] font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Point Team B</button>
+                     </div>
+                   </div>
                 </>
               )}
             </div>

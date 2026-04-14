@@ -24,7 +24,8 @@ const matchSchema = new mongoose.Schema({
   }],
   scheduledAt: { type: Date, default: Date.now },
   completed: { type: Boolean, default: false },
-  isLive: { type: Boolean, default: false }
+  isLive: { type: Boolean, default: false },
+  isNormalMatch: { type: Boolean, default: false }
 }, { timestamps: true });
 
 export const Match = mongoose.model('Match', matchSchema);
@@ -100,4 +101,16 @@ const calendarEventSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const CalendarEvent = mongoose.model('CalendarEvent', calendarEventSchema);
+
+const attendanceSchema = new mongoose.Schema({
+  date: { type: String, required: true, unique: true }, // YYYY-MM-DD
+  presentCount: { type: Number, required: true },
+  totalCount: { type: Number, required: true },
+  submittedBy: { type: String, required: true },
+  lastEditedBy: { type: String },
+  supervisors: [String],
+  statuses: { type: Map, of: Boolean, required: true }
+}, { timestamps: true });
+
+export const Attendance = mongoose.model('Attendance', attendanceSchema);
 
