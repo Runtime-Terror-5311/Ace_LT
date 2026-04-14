@@ -11,25 +11,63 @@ interface SettingsProps {
 const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
   const [photoUrl, setPhotoUrl] = useState(user.avatar || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true);
-    // Simulate API call
-    setTimeout(() => {
-      onUserUpdate({ ...user, avatar: photoUrl });
+    try {
+      const token = localStorage.getItem('ace_token');
+      const res = await fetch('/api/users/profile', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ avatar: photoUrl })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        onUserUpdate(data.user);
+        alert('Profile updated successfully!');
+      } else {
+        const data = await res.json();
+        alert(`Update failed: ${data.message}`);
+      }
+    } catch (err) {
+      console.error('Update profile error:', err);
+      alert('Network error during profile update.');
+    } finally {
       setIsSaving(false);
-      alert('Profile updated successfully!');
-    }, 800);
+    }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'Ace-LT');
+
+    try {
+      const res = await fetch('https://api.cloudinary.com/v1_1/de8wbpubb/image/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPhotoUrl(data.secure_url);
+      } else {
+        alert('Failed to upload image. Please check your Cloudinary settings.');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Network error during image upload.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -46,7 +84,17 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
            <div className="relative group">
               <div className="w-32 h-32 rounded-3xl bg-slate-50 border-4 border-emerald-50 overflow-hidden shadow-inner flex items-center justify-center">
                  {photoUrl ? (
-                   <img src={photoUrl} className="w-full h-full object-cover" alt="Profile" />
+                   <div className="relative group/img w-full h-full">
+                     <img src={photoUrl} className="w-full h-full object-cover" alt="Profile" />
+                     <button 
+                       type="button"
+                       onClick={() => setPhotoUrl('')}
+                       className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                       title="Remove Photo"
+                     >
+                       <X size={20} />
+                     </button>
+                   </div>
                  ) : (
                    <UserIcon size={48} className="text-slate-200" />
                  )}

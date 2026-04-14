@@ -6,7 +6,8 @@ import cors from 'cors';
 import { connectDB } from './config/db';
 import { seedDatabase } from './utils/seed';
 import authRoutes from './routes/authRoutes';
-import matchRoutes from './routes/matchRoutes';
+import { getMatches, createMatch, deleteAllMatches } from './controllers/matchController';
+import { authenticateToken } from './middleware/auth';
 import inventoryRoutes from './routes/inventoryRoutes';
 import userRoutes from './routes/userRoutes';
 import requestRoutes from './routes/requestRoutes';
@@ -40,7 +41,9 @@ async function startServer() {
 
   // Routes
   app.use('/api/auth', authRoutes);
-  app.use('/api/matches', matchRoutes);
+  app.get('/api/matches', authenticateToken, getMatches);
+  app.post('/api/matches', authenticateToken, createMatch);
+  app.post('/api/reset-leaderboard', authenticateToken, deleteAllMatches);
   app.use('/api/inventory', inventoryRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/requests', requestRoutes);

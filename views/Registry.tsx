@@ -4,7 +4,7 @@ import {
   Users, Shield, ArrowRightLeft, Calendar, UserCheck, Search, 
   Filter, AlertCircle, Trash2, PlusCircle, UserPlus, Info, 
   ShieldAlert, X, FileSpreadsheet, Link2, Download, Table,
-  Zap, Camera
+  Zap, Camera, RotateCcw
 } from 'lucide-react';
 import { User, UserRole, Gender } from '@/types';
 
@@ -20,8 +20,39 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
   const [handoverModal, setHandoverModal] = useState<{ role: UserRole | null, successorId: string }>({ role: null, successorId: '' });
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [sheetUrl, setSheetUrl] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const profileUploadRef = useRef<HTMLInputElement>(null);
   
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'Ace-LT');
+
+    try {
+      const res = await fetch('https://api.cloudinary.com/v1_1/de8wbpubb/image/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setNewInductee((prev) => ({ ...prev, imageUrl: data.secure_url }));
+      } else {
+        alert('Failed to upload image. Please check your Cloudinary settings.');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Network error during image upload.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   // Induction Form State
   const [newInductee, setNewInductee] = useState({
     name: '',
@@ -75,7 +106,7 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
       if (res.ok) {
         // Also update local state for immediate UI update
         const newMember: User = {
-          id: data.user?._id || `u${Date.now()}`,
+          id: data.user?._id || data.user?.id || `u${Date.now()}`,
           name: newInductee.name,
           email: newInductee.email,
           regNo: newInductee.regNo,
@@ -195,6 +226,40 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
     );
   }, [members, user.id, user.gender]);
 
+  const handleResetLeaderboard = async () => {
+    if (!isAdmin) return;
+    
+    if (window.confirm("CRITICAL ACTION: This will PERMANENTLY delete all match history, umpire sheets, and reset the leaderboard to 0 for everyone. Are you sure?")) {
+      const secondCheck = window.confirm("FINAL CONFIRMATION: Are you absolutely certain? This cannot be undone.");
+      if (secondCheck) {
+        try {
+          const token = localStorage.getItem('ace_token');
+          const res = await fetch('/api/reset-leaderboard', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (res.ok) {
+            alert("Leaderboard has been reset to zero. All match history cleared.");
+            window.location.reload();
+          } else {
+            let errorMsg = 'Unknown error';
+            try {
+              const data = await res.json();
+              errorMsg = data.message || `Server Error (${res.status})`;
+            } catch (jsonErr) {
+              errorMsg = `Server responded with status ${res.status}. Please check your login session.`;
+            }
+            alert(`Reset failed: ${errorMsg}`);
+          }
+        } catch (err) {
+          console.error('Reset error:', err);
+          alert(`Network error during reset: ${err instanceof Error ? err.message : 'Unknown'}. Please check your connection and ensure the server is running.`);
+        }
+      }
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -265,15 +330,28 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
                   />
                 </div>
                 <div className="space-y-1">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Photo URL (Optional)</label>
+                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Profile Photo</label>
                    <div className="relative group">
                      <input 
-                       placeholder="https://..." 
-                       className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 pl-10 text-xs font-bold outline-none focus:ring-1 focus:ring-emerald-500"
-                       value={newInductee.imageUrl}
-                       onChange={(e) => setNewInductee({...newInductee, imageUrl: e.target.value})}
+                       type="file"
+                       className="hidden" 
+                       ref={profileUploadRef}
+                       accept="image/*"
+                       onChange={handleImageUpload}
                      />
-                     <Camera className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                     <button 
+                       type="button"
+                       onClick={() => profileUploadRef.current?.click()}
+                       disabled={isUploading}
+                       className={`w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 pl-10 text-left text-xs font-bold outline-none focus:ring-1 focus:ring-emerald-500 transition-all ${newInductee.imageUrl ? 'text-emerald-600 border-emerald-100' : 'text-slate-400'}`}
+                     >
+                       {isUploading ? 'Uploading...' : newInductee.imageUrl ? 'Photo Attached ✓' : 'Click to Upload'}
+                     </button>
+                     {isUploading ? (
+                       <Zap className="absolute left-3 top-1/2 -translate-y-1/2 animate-pulse text-emerald-500" size={14} />
+                     ) : (
+                       <Camera className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                     )}
                    </div>
                 </div>
                 <div className="flex gap-2">
@@ -314,6 +392,32 @@ const Registry: React.FC<RegistryProps> = ({ user, members, setMembers, onUserUp
               </form>
             </div>
           </div>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="grid grid-cols-1 gap-6 mb-8 animate-in slide-in-from-top-6">
+           <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-red-100 relative overflow-hidden">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-red-50 text-red-600 rounded-xl flex items-center justify-center border border-red-100 shadow-sm">
+                    <ShieldAlert size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 tracking-tight">Danger Zone (Admin Only)</h3>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">System-wide data management and destructive actions</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                   <button 
+                    onClick={handleResetLeaderboard}
+                    className="flex items-center gap-2 px-6 py-3 bg-white text-red-600 border border-red-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                   >
+                     <RotateCcw size={16} /> Reset Leaderboard to Zero
+                   </button>
+                </div>
+              </div>
+           </div>
         </div>
       )}
 

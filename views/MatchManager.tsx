@@ -127,6 +127,7 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
     sets: 3, // Total Sets (Best of)
     games: 6, // Games to win a set
     useSuperTieBreak: true, // Play super tie-break instead of final set
+    isNormalMatch: false, // New field for simple scoring
     date: new Date().toISOString().slice(0, 10),
     court: 'Court 1',
   });
@@ -354,31 +355,46 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
         newScore.p2 = 0;
         newScore[player === 'p1' ? 'games1' : 'games2']++;
 
+        // Set Win Condition
         const p1G = newScore.games1;
         const p2G = newScore.games2;
-        const winGames = config.games; // Usually 6
+        const winGames = config.games;
 
-        // Set Win Condition: at least 6 games AND 2-game lead
-        // Or 7-5, 7-6
-        if ((p1G >= winGames || p2G >= winGames) && Math.abs(p1G - p2G) >= 2) {
-          // Normal Set Win (e.g. 6-0, 6-4, 7-5)
-          const setWinner = p1G > p2G ? '1' : '2';
-          newScore[`sets${setWinner}` as 'sets1' | 'sets2']++;
-          setSetScores(prev => [...prev, `${p1G}-${p2G}`]);
-          newScore.games1 = 0;
-          newScore.games2 = 0;
+        if (config.isNormalMatch) {
+          // Normal Match: First to target games wins immediately (no win-by-2, no tie-break)
+          if (p1G >= winGames || p2G >= winGames) {
+            const setWinner = p1G > p2G ? '1' : '2';
+            newScore[`sets${setWinner}` as 'sets1' | 'sets2']++;
+            setSetScores(prev => [...prev, `${p1G}-${p2G}`]);
+            newScore.games1 = 0;
+            newScore.games2 = 0;
 
-          const targetS = Math.floor(config.sets / 2) + 1;
-          if (newScore.sets1 >= targetS || newScore.sets2 >= targetS) {
-            setIsMatchOver(true);
-          } else if (config.useSuperTieBreak && (newScore.sets1 + newScore.sets2 === config.sets - 1)) {
-            setIsSuperTieBreak(true);
-            newIsSuperTieBreak = true;
+            const targetS = Math.floor(config.sets / 2) + 1;
+            if (newScore.sets1 >= targetS || newScore.sets2 >= targetS) {
+              setIsMatchOver(true);
+            }
           }
-        } else if (p1G === winGames && p2G === winGames) {
-          // Tie-break trigger at 6-6
-          setIsTieBreak(true);
-          newIsTieBreak = true;
+        } else {
+          // Standard Rules: at least 6 games AND 2-game lead (or 7-5, 7-6)
+          if ((p1G >= winGames || p2G >= winGames) && Math.abs(p1G - p2G) >= 2) {
+            const setWinner = p1G > p2G ? '1' : '2';
+            newScore[`sets${setWinner}` as 'sets1' | 'sets2']++;
+            setSetScores(prev => [...prev, `${p1G}-${p2G}`]);
+            newScore.games1 = 0;
+            newScore.games2 = 0;
+
+            const targetS = Math.floor(config.sets / 2) + 1;
+            if (newScore.sets1 >= targetS || newScore.sets2 >= targetS) {
+              setIsMatchOver(true);
+            } else if (config.useSuperTieBreak && (newScore.sets1 + newScore.sets2 === config.sets - 1)) {
+              setIsSuperTieBreak(true);
+              newIsSuperTieBreak = true;
+            }
+          } else if (p1G === winGames && p2G === winGames) {
+            // Tie-break trigger at 6-6
+            setIsTieBreak(true);
+            newIsTieBreak = true;
+          }
         }
       } else {
         newScore[player]++;
@@ -390,18 +406,25 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
   const saveAndSyncStats = async () => {
     const isTeam1Winner = score.sets1 > score.sets2;
     const winnerName = isTeam1Winner ? team1Name : team2Name;
-    const winnerId = isTeam1Winner ? selectedPlayer1?.id : selectedPlayer2?.id;
+    
+    // Resolve IDs properly (checking both _id and id)
+    const p1Id = (selectedPlayer1 as any)?._id || (selectedPlayer1 as any)?.id || '';
+    const p1bId = (selectedPlayer1b as any)?._id || (selectedPlayer1b as any)?.id;
+    const p2Id = (selectedPlayer2 as any)?._id || (selectedPlayer2 as any)?.id || '';
+    const p2bId = (selectedPlayer2b as any)?._id || (selectedPlayer2b as any)?.id;
+    
+    const winnerId = isTeam1Winner ? p1Id : p2Id;
     
     const newHistoryItem: Match = {
       id: `h${Date.now()}`,
       category: config.category,
-      player1Id: selectedPlayer1?.id || '',
+      player1Id: p1Id,
       player1Name: config.p1Name,
-      player1bId: selectedPlayer1b?.id,
+      player1bId: p1bId,
       player1bName: config.p1bName,
-      player2Id: selectedPlayer2?.id || '',
+      player2Id: p2Id,
       player2Name: config.p2Name,
-      player2bId: selectedPlayer2b?.id,
+      player2bId: p2bId,
       player2bName: config.p2bName,
       score1: String(score.sets1),
       score2: String(score.sets2),
@@ -409,6 +432,7 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
       winner: winnerName,
       type: config.type,
       court: config.court,
+      isNormalMatch: config.isNormalMatch,
       gameHistory: [...gameHistory],
       scheduledAt: config.date,
       completed: true,
@@ -521,6 +545,25 @@ const MatchManager: React.FC<{ user: User; members: User[] }> = ({ user, members
                   <h3 className="text-xl font-bold text-slate-900">Pre-Match Configuration</h3>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Official Tournament Setup</p>
                 </div>
+              </div>
+
+              {/* Normal Match Mode Toggle */}
+              <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between group hover:border-emerald-200 transition-all">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${config.isNormalMatch ? 'bg-emerald-600 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>
+                    <Zap size={24} fill={config.isNormalMatch ? "currentColor" : "none"} />
+                  </div>
+                  <div>
+                    <p className="font-black text-slate-900 uppercase tracking-tight">Normal Match Mode</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Simple scoring (No Tie-breaks, 6-5 wins set)</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setConfig({...config, isNormalMatch: !config.isNormalMatch})}
+                  className={`w-14 h-7 rounded-full transition-all relative ${config.isNormalMatch ? 'bg-emerald-600' : 'bg-slate-300'}`}
+                >
+                  <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all shadow-md ${config.isNormalMatch ? 'left-8' : 'left-1'}`} />
+                </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-12 gap-y-6">

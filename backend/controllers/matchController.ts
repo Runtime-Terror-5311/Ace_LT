@@ -19,3 +19,17 @@ export const createMatch = async (req: any, res: any) => {
     res.status(400).json({ message: 'Error creating match' });
   }
 };
+
+export const deleteAllMatches = async (req: any, res: any) => {
+  // Only admins can delete matches
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ message: 'Only administrators can reset the leaderboard.' });
+  }
+
+  try {
+    await Match.deleteMany({});
+    res.json({ message: 'Leaderboard reset successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error resetting leaderboard' });
+  }
+};

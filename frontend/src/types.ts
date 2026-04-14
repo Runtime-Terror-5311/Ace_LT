@@ -52,6 +52,7 @@ export interface Match {
   gameHistory: GameScore[];
   scheduledAt: string;
   completed: boolean;
+  isNormalMatch?: boolean;
   isLive?: boolean;
   createdAt: string;
 }

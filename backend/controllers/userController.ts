@@ -18,7 +18,7 @@ export const registerUser = async (req: any, res: any) => {
       return res.status(403).json({ message: 'Only leadership can register new members.' });
     }
 
-    const { name, email, regNo, phone, designation, gender, currentYear, role } = req.body;
+    const { name, email, regNo, phone, designation, gender, currentYear, role, avatar } = req.body;
 
     if (!name || !email || !regNo || !phone || !gender) {
       return res.status(400).json({ message: 'Name, email, regNo, phone, and gender are required.' });
@@ -68,7 +68,8 @@ export const registerUser = async (req: any, res: any) => {
       currentYear: collegeYear,
       year: collegeYear,
       role: userRole,
-      isInducted: true
+      isInducted: true,
+      avatar: avatar
     });
 
     const userResponse = newUser.toObject();
@@ -136,5 +137,31 @@ export const togglePaymentStatus = async (req: any, res: any) => {
   } catch (err) {
     console.error('Update payment status error:', err);
     res.status(500).json({ message: 'Error updating payment status' });
+  }
+};
+
+export const updateUserProfile = async (req: any, res: any) => {
+  try {
+    const { avatar } = req.body;
+    const userId = req.user?._id || req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { avatar },
+      { new: true }
+    ).select('-password -otp -otpExpiry');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({ message: 'Profile updated successfully', user: updatedUser });
+  } catch (err) {
+    console.error('Update profile error:', err);
+    res.status(500).json({ message: 'Error updating profile' });
   }
 };

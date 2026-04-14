@@ -24,7 +24,8 @@ const matchSchema = new mongoose.Schema({
   }],
   scheduledAt: { type: Date, default: Date.now },
   completed: { type: Boolean, default: false },
-  isLive: { type: Boolean, default: false }
+  isLive: { type: Boolean, default: false },
+  isNormalMatch: { type: Boolean, default: false }
 }, { timestamps: true });
 
 export const Match = mongoose.model('Match', matchSchema);
