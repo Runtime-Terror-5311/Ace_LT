@@ -95,10 +95,11 @@ async function startServer() {
       process.exit(1);
     }
     
-    app.use(express.static(distPath) );
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    app.use(express.static(distPath));
+
+app.use((_req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'));
+});
     console.log('Static file serving initialized.');
   }
 
