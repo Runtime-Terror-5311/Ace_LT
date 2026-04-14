@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { User as UserIcon, Bell, Shield, Smartphone, Globe, Camera, Loader } from 'lucide-react';
+import { User as UserIcon, Bell, Shield, Smartphone, Globe, Save, Camera, X, Loader } from 'lucide-react';
 import { User } from '@/types';
 import { uploadToCloudinary } from '@/utils/cloudinary';
 
@@ -13,33 +13,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
   const [photoUrl, setPhotoUrl] = useState(user.avatar || '');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-<<<<<<< HEAD
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const token = localStorage.getItem('ace_token');
-      const res = await fetch('/api/users/profile', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ avatar: photoUrl })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        onUserUpdate(data.user);
-        alert('Profile updated successfully!');
-      } else {
-        const data = await res.json();
-        alert(`Update failed: ${data.message}`);
-      }
-    } catch (err) {
-      console.error('Update profile error:', err);
-      alert('Network error during profile update.');
-=======
   const [error, setError] = useState<string | null>(null);
 
   // Save profile with updated avatar
@@ -72,7 +45,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
     } catch (err) {
       setError('Error saving profile');
       console.error(err);
->>>>>>> 75a78a7 (Fixed image uploading and removed unwanted files)
     } finally {
       setIsSaving(false);
     }
@@ -83,27 +55,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
     if (!file) return;
 
     setIsUploading(true);
-<<<<<<< HEAD
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'Ace-LT');
-
-    try {
-      const res = await fetch('https://api.cloudinary.com/v1_1/de8wbpubb/image/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setPhotoUrl(data.secure_url);
-      } else {
-        alert('Failed to upload image. Please check your Cloudinary settings.');
-      }
-    } catch (err) {
-      console.error('Upload error:', err);
-      alert('Network error during image upload.');
-=======
     setError(null);
 
     try {
@@ -113,7 +64,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
     } catch (err) {
       setError('Upload failed. Please try again.');
       console.error(err);
->>>>>>> 75a78a7 (Fixed image uploading and removed unwanted files)
     } finally {
       setIsUploading(false);
     }
@@ -132,17 +82,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
            <div className="relative group">
               <div className="w-32 h-32 rounded-3xl bg-slate-50 border-4 border-emerald-50 overflow-hidden shadow-inner flex items-center justify-center">
                  {photoUrl ? (
-                   <div className="relative group/img w-full h-full">
-                     <img src={photoUrl} className="w-full h-full object-cover" alt="Profile" />
-                     <button 
-                       type="button"
-                       onClick={() => setPhotoUrl('')}
-                       className="absolute inset-0 bg-black/40 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
-                       title="Remove Photo"
-                     >
-                       <X size={20} />
-                     </button>
-                   </div>
+                   <img src={photoUrl} className="w-full h-full object-cover" alt="Profile" />
                  ) : (
                    <UserIcon size={48} className="text-slate-200" />
                  )}

@@ -12,13 +12,10 @@ import userRoutes from './routes/userRoutes';
 import requestRoutes from './routes/requestRoutes';
 import announcementRoutes from './routes/announcementRoutes';
 import eventRoutes from './routes/eventRoutes';
-<<<<<<< HEAD
 import attendanceRoutes from './routes/attendanceRoutes';
-=======
 import achievementRoutes from './routes/achievementRoutes';
 import alumniRoutes from './routes/alumniRoutes';
 import uploadRoutes from './routes/uploadRoutes';
->>>>>>> 75a78a7 (Fixed image uploading and removed unwanted files)
 
 dotenv.config();
 
@@ -53,13 +50,10 @@ async function startServer() {
   app.use('/api/requests', requestRoutes);
   app.use('/api/announcements', announcementRoutes);
   app.use('/api/events', eventRoutes);
-<<<<<<< HEAD
   app.use('/api/attendance', attendanceRoutes);
-=======
   app.use('/api/achievements', achievementRoutes);
   app.use('/api/alumni', alumniRoutes);
   app.use('/api/uploads', uploadRoutes);
->>>>>>> 75a78a7 (Fixed image uploading and removed unwanted files)
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
