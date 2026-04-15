@@ -152,7 +152,7 @@ export const updateUserProfile = async (req: any, res: any) => {
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { avatar },
-      { new: true }
+      { returnDocument: 'after' }
     ).select('-password -otp -otpExpiry');
 
     if (!updatedUser) {

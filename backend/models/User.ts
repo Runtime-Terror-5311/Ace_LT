@@ -18,7 +18,10 @@ const userSchema = new mongoose.Schema({
   gender: { type: String, enum: ['boys', 'girls', 'Boys', 'Girls'], required: true },
   isInducted: { type: Boolean, default: false },
   isPaid: { type: Boolean, default: false },
-  avatar: { type: String },
+  avatar: { 
+  type: String, 
+  default: '/Avatar.png' 
+},
   otp: { type: String },
   otpExpiry: { type: Date },
   joinedAt: { type: Date, default: Date.now }
